@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>研途助手</title>
+  <style>
+    :root { color-scheme: light dark; font: 13px/1.5 system-ui, sans-serif; }
+    body { margin: 0; padding: 18px; color: #29303a; background: #f7f8fb; }
+    h1 { margin: 0 0 4px; font-size: 18px; }
+    p { margin: 0 0 16px; color: #697282; }
+    .card { background: #fff; border: 1px solid #e4e7ee; border-radius: 10px; padding: 14px; }
+    dl { display: grid; grid-template-columns: minmax(90px, 1fr) 1.5fr; gap: 10px; margin: 0; }
+    dt { color: #697282; } dd { margin: 0; overflow-wrap: anywhere; }
+    button { margin-top: 14px; padding: 7px 14px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
+    @media (prefers-color-scheme: dark) { body { color: #e9edf4; background: #20242b; } .card { background: #2a3039; border-color: #3b4350; } p, dt { color: #aeb7c6; } }
+  </style>
+</head>
+<body>
+  <h1>研途助手</h1>
+  <p>IDEA 插件运行环境检查</p>
+  <div class="card">
+    <dl>
+      <dt>IDEA</dt><dd id="idea">正在检查…</dd>
+      <dt>插件版本</dt><dd id="plugin">正在检查…</dd>
+      <dt>Java</dt><dd id="java">正在检查…</dd>
+      <dt>JCEF</dt><dd id="jcef">正在检查…</dd>
+      <dt>日志目录</dt><dd id="logs">正在检查…</dd>
+      <dt>数据目录</dt><dd id="data">正在检查…</dd>
+      <dt>数据分区</dt><dd id="partitions">正在检查…</dd>
+      <dt>扫描会话</dt><dd id="sessions">—</dd>
+      <dt>扫描请求</dt><dd id="requests">—</dd>
+      <dt>待重试文件</dt><dd id="incomplete">—</dd>
+      <dt>日志文件</dt><dd id="logFiles">—</dd>
+      <dt>日志请求</dt><dd id="logRequests">—</dd>
+      <dt>日志状态</dt><dd id="logState">—</dd>
+      <dt>Token 冲突</dt><dd id="tokenMismatch">—</dd>
+      <dt>最近请求</dt><dd id="request">—</dd>
+      <dt>请求状态</dt><dd id="state">—</dd>
+      <dt>Token</dt><dd id="usage">—</dd>
+      <dt>Tool / Skill</dt><dd id="tools">—</dd>
+      <dt>代码增删</dt><dd id="code">—</dd>
+      <dt>检查时间</dt><dd id="checked">正在检查…</dd>
+    </dl>
+    <button id="refresh" type="button">刷新状态</button>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h2 style="margin-top:0;font-size:16px">平台登录</h2>
+    <label for="apiBaseUrl">平台 API 地址</label>
+    <input id="apiBaseUrl" type="url" placeholder="https://platform.example/api/v1" style="width:100%;box-sizing:border-box;padding:7px;margin-top:5px">
+    <button id="saveUrl" type="button">保存地址</button>
+    <button id="probe" type="button">测试连接</button>
+    <button id="login" type="button">设备码登录</button>
+    <button id="verify" type="button">验证 API</button>
+    <button id="logout" type="button">退出登录</button>
+    <dl style="margin-top:14px"><dt>状态</dt><dd id="loginState">未登录</dd>
+      <dt>说明</dt><dd id="loginMessage">—</dd>
+      <dt>设备码</dt><dd id="userCode">—</dd>
+      <dt>授权链接</dt><dd><a id="verificationUri" target="_blank" rel="noopener noreferrer">—</a></dd></dl>
+  </div>
+  <script>
+    window.yantuHost = { postMessage: function (message) { /*__YANTU_JS_QUERY__*/ } };
+    window.yantuHostEvent = function (status) {
+      const fields = {
+        idea: status.ideaVersion,
+        plugin: status.pluginVersion,
+        java: status.javaVersion,
+        jcef: status.jcefAvailable ? '可用' : '不可用',
+        logs: status.logsStatus,
+        data: status.dataStatus,
+        partitions: String(status.dataPartitions),
+        sessions: String(status.scannedSessions),
+        requests: String(status.scannedRequests),
+        incomplete: String(status.incompleteFiles),
+        logFiles: String(status.logFilesScanned),
+        logRequests: String(status.logRequests),
+        logState: status.latestLogState,
+        tokenMismatch: status.tokenMismatch ? "有" : "无",
+        request: status.latestRequestId,
+        state: status.latestState,
+        usage: status.latestUsage,
+        tools: status.latestTools + " / " + status.latestSkills,
+        code: status.latestCode,
+        checked: status.checkedAt,
+        loginState: status.loginState,
+        loginMessage: status.loginMessage,
+        userCode: status.userCode || "—",
+        verificationUri: status.verificationUri || "—"
+      };
+      for (const [id, value] of Object.entries(fields)) document.getElementById(id).textContent = value;
+      const input = document.getElementById("apiBaseUrl");
+      if (document.activeElement !== input) input.value = status.platformUrl || "";
+      const authLink = document.getElementById("verificationUri");
+      authLink.href = status.verificationUri || "#";
+      authLink.textContent = status.verificationUri || "—";
+    };
+    document.getElementById('refresh').addEventListener('click', function () {
+      window.yantuHost.postMessage({ type: 'status' });
+    });
+    document.getElementById('saveUrl').addEventListener('click', function () {
+      window.yantuHost.postMessage({ type: 'configure', apiBaseUrl: document.getElementById('apiBaseUrl').value });
+    });
+    for (const [id, type] of [['probe', 'test-connection'], ['login', 'login'], ['verify', 'verify-api'], ['logout', 'logout']]) {
+      document.getElementById(id).addEventListener('click', function () {
+        window.yantuHost.postMessage({ type: type, apiBaseUrl: document.getElementById('apiBaseUrl').value });
+      });
+    }
+    setInterval(function () { window.yantuHost.postMessage({ type: 'status' }); }, 4000);
+    window.yantuHost.postMessage({ type: 'ready' });
+  </script>
+</body>
+</html>
