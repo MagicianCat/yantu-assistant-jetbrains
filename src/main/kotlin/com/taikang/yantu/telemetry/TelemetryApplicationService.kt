@@ -4,6 +4,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.ProjectManager
 import com.taikang.yantu.platform.YantuPlatformService
 import java.nio.channels.FileChannel
 import java.nio.channels.FileLock
@@ -34,6 +35,7 @@ class TelemetryApplicationService : Disposable {
     private var channel: FileChannel? = null
     private var lock: FileLock? = null
     private var outbox: DurableOutbox? = null
+    private val diagnosticsSeen = mutableSetOf<String>()
     @Volatile private var mode = "未启动"
     @Volatile private var lastError = ""
     @Volatile private var lastScanAt = ""
@@ -81,24 +83,30 @@ class TelemetryApplicationService : Disposable {
         val logs = logScanner.scan()
         lastStructured = structured
         lastLogs = logs
-        val mapper = GenerationMapper(store.installationId)
+        val mapper = GenerationMapper(store.installationId, diagnostic = { detail ->
+            if (diagnosticsSeen.add(detail)) LOG.info("telemetry resolution $detail")
+        })
+        val openWorkspaces = ProjectManager.getInstance().openProjects.mapNotNull { it.basePath }.distinct()
         val observed = mutableSetOf<String>()
+        val structuredKeys = structured.turns.map { it.conversationId to it.requestId }.toSet()
         val duplicateIds = structured.turns.groupBy { mapper.generationId(it.workspaceHash, it.conversationId, it.requestId) }
             .filterValues { turns -> turns.map { it.nativeInstallationId }.distinct().size > 1 }.keys
         val collisionWarning = if (duplicateIds.isNotEmpty()) "发现跨原生安装分区的重复轮次 ID，已跳过 ${duplicateIds.size} 轮" else ""
         if (collisionWarning.isNotEmpty()) lastError = collisionWarning
         for (turn in structured.turns) {
             val log = logs.turns[turn.requestId]?.takeIf {
-                it.conversationId == turn.conversationId &&
-                    (it.workspaceHash.isNullOrBlank() || it.workspaceHash == turn.workspaceHash)
+                it.conversationId == turn.conversationId
             }
-            val mapped = mapper.structured(turn, log) ?: continue
+            val matchedWorkspace = if (turn.workspacePath.isNullOrBlank() && log?.workspacePath.isNullOrBlank())
+                openWorkspaces.singleOrNull { WorkspaceHash.matches(it, turn.workspaceHash) } else null
+            val mapped = mapper.structured(if (matchedWorkspace != null) turn.copy(workspacePath = matchedWorkspace) else turn, log) ?: continue
             if (mapped.generationId in duplicateIds) continue
             observed.add(mapped.generationId)
             store.upsertGeneration(mapped.generationId, mapped.payload, mapped.quality)
             for (skill in mapped.skills) store.enqueueSkill(skill.get("eventId").asString, skill)
         }
         for (turn in logs.turns.values) {
+            if ((turn.conversationId to turn.requestId) in structuredKeys) continue
             val mapped = mapper.logOnly(turn) ?: continue
             if (mapped.generationId !in observed && mapped.generationId !in duplicateIds)
                 store.upsertGeneration(mapped.generationId, mapped.payload, mapped.quality)

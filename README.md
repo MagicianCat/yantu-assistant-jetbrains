@@ -17,6 +17,8 @@
 
 若上传失败，状态页会显示接口路径、HTTP 状态或简短异常。不要发送访问令牌、原始对话、源码或完整本地日志。
 若需要定位间歇性失败，可在 IDEA **Help → Show Log in Explorer** 打开 `idea.log`，仅搜索 `telemetry response` 与 `telemetry upload` 两类行；它们包含接口路径、HTTP 状态、后端错误码/请求 ID、稳定记录 ID、revision 和尝试次数，不记录请求正文或令牌。分享时只截取相关行。
+项目名或项目级 Skill 未识别时，搜索 `telemetry resolution`：`workspace unresolved` 表示两种采集源都未提供可用项目目录；`skill marker unresolved` 的 `workspaceStatus` 区分目录不可用、项目标记缺失和标记无效。日志不包含完整工作区路径。
+日志文件名的 hash 与结构化 history 的 workspaceHash 不能直接比较。本版按 conversationId/requestId 合并，并从日志首行读取 `Workspace Path`；当落盘源都缺少路径时，仅在当前打开的 IDEA 项目路径与 TkCoding history 的 MD5 hash 精确匹配时使用该项目目录。
 
 ## 数据范围与口径
 

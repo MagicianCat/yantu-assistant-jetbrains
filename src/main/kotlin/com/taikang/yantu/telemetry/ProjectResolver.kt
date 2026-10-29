@@ -9,11 +9,7 @@ class ProjectResolver(private val installationId: String) {
 
     fun resolve(workspace: String?): Identity? {
         if (workspace.isNullOrBlank()) return null
-        val path = runCatching {
-            val raw = workspace.trim()
-            (if (raw.startsWith("file:", true)) Path.of(java.net.URI.create(raw)) else Path.of(raw))
-                .toAbsolutePath().normalize()
-        }.getOrNull() ?: return null
+        val path = WorkspacePath.parse(workspace) ?: return null
         if (!Files.isDirectory(path)) return null
         val remote = originRemote(path)
         if (remote != null) {

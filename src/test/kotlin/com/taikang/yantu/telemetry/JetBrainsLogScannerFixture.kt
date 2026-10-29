@@ -10,6 +10,7 @@ object JetBrainsLogScannerFixture {
             val day = root.resolve("2026-10-27")
             Files.createDirectories(day)
             Files.writeString(day.resolve("workspace__hash.log"), """
+                2026 CheckpointCoordinator] initialize START: conversationId=conversation-a, workspace=C:\work\sample
                 2026 [AgentReporter] onAgentStart: userInput=private text agent=a mode=x conversationId=conversation-a requestId=request-1
                 2026 notifyStepEnd, step: 1, requestId: request-1, usage: {"inputTokens":10,"outputTokens":2,"totalTokens":12}
                 2026 tool-call-streaming-start 开始解析: tool-1 - use_skill
@@ -24,6 +25,7 @@ object JetBrainsLogScannerFixture {
             check(result.files == 1 && result.turns.size == 2) { result }
             check(result.turns["request-1"]?.toolCalls == 1 && result.turns["request-1"]?.totalTokens == 12L) { result }
             check(result.turns["request-1"]?.skillCallDetails?.single()?.skillKey == "security-review") { result }
+            check(result.turns["request-1"]?.workspacePath == "C:\\work\\sample") { result }
             check(result.turns["request-2"]?.toolCalls == 0 && result.turns["request-2"]?.totalTokens == 24L) { result }
             check(scanner.scan().turns.size == 2)
             val log = day.resolve("workspace__hash.log")
@@ -33,6 +35,11 @@ object JetBrainsLogScannerFixture {
             check(scanner.scan().turns["request-3"]?.state == "COMPLETED")
             Files.writeString(log, "2026 [AgentReporter] onAgentStart: userInput=x agent=a mode=x conversationId=conversation-a requestId=request-4\n")
             check(scanner.scan().turns.keys == setOf("request-4")) // truncate/rotation-like replacement
+            Files.writeString(log, "Workspace Path: C:\\work\\sample\n" + "x".repeat(2_100_000) +
+                "\n2026 [AgentReporter] onAgentStart: userInput=x agent=a mode=x conversationId=conversation-a requestId=request-5\n" +
+                "2026 [AgentReporter] onAgentEnd: conversationId=conversation-a requestId=request-5 error=false\n")
+            check(scanner.scan().turns["request-5"]?.workspacePath == "C:\\work\\sample")
+            check(WorkspaceHash.matches("D:/IdeaProjects/test-comon-lib", "d572c07ebb56b803b9d8be2ba90c0d61"))
         } finally {
             Files.walk(root).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
         }

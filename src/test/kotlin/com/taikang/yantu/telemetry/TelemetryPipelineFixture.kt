@@ -23,6 +23,10 @@ object TelemetryPipelineFixture {
                 fileTypes = listOf(StructuredScanner.FileTypeMetric("JAVA", "java", 10, 2, 0, 2)),
                 filesModified = 2, startedAt = "2026-10-27T02:00:00Z")
             val mapped1 = mapper.structured(first, null)!!
+            val fallback = mapper.structured(first.copy(workspacePath = "missing-project"),
+                JetBrainsLogScanner.Turn("request-1", "COMPLETED", null, null, null, 1,
+                    conversationId = "conversation-a", workspacePath = workspace.toString()))!!
+            check(fallback.payload.get("projectName").asString == "project" && fallback.skills.size == 1)
             val mapped2 = mapper.structured(second, null)!!
             check(mapped1.payload.get("sessionId").asString == "conversation-a")
             check(mapped1.payload.get("clientSessionId") == null)

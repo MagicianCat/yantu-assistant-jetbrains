@@ -10,15 +10,23 @@ import java.util.UUID
 
 class SkillMarkerResolver(private val home: Path = Path.of(System.getProperty("user.home"))) {
     data class Marker(val skillKey: String, val skillVersionId: Long?, val installationId: String?)
+    fun projectMarkerStatus(key: String, workspace: String?): String {
+        val root = WorkspacePath.parse(workspace) ?: return "workspace_missing"
+        if (!Files.isDirectory(root)) return "workspace_unavailable"
+        val marker = root.resolve(".codebuddy").resolve("skills").resolve(key).resolve(".yantu-platform-skill.json")
+        if (!Files.isRegularFile(marker)) return "project_marker_missing"
+        if (Files.isSymbolicLink(marker) || runCatching { Files.size(marker) !in 1..65_536 }.getOrDefault(true)) return "project_marker_invalid"
+        val valid = runCatching {
+            val row = JsonParser.parseString(Files.readString(marker)).asJsonObject
+            row.get("source")?.asString == "yantu-platform" && row.get("skillKey")?.asString == key
+        }.getOrDefault(false)
+        return if (valid) "project_marker_found" else "project_marker_invalid"
+    }
     fun resolve(key: String, workspace: String?): Marker? {
         if (!key.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}"))) return null
         val roots = mutableListOf<Path>()
         if (!workspace.isNullOrBlank()) {
-            runCatching {
-                val raw = workspace.trim()
-                (if (raw.startsWith("file:", true)) Path.of(java.net.URI.create(raw)) else Path.of(raw))
-                    .toAbsolutePath().normalize()
-            }.getOrNull()
+            WorkspacePath.parse(workspace)
                 ?.takeIf { it.parent != null && Files.isDirectory(it) }?.let(roots::add)
         }
         roots.add(home)
@@ -38,7 +46,8 @@ class SkillMarkerResolver(private val home: Path = Path.of(System.getProperty("u
 }
 
 /** Maps one request to the exact backend DTO; no message text or file path enters the payload. */
-class GenerationMapper(private val installationId: String, private val markers: SkillMarkerResolver = SkillMarkerResolver()) {
+class GenerationMapper(private val installationId: String, private val markers: SkillMarkerResolver = SkillMarkerResolver(),
+                       private val diagnostic: (String) -> Unit = {}) {
     private val projects = ProjectResolver(installationId)
     data class Mapped(val generationId: String, val quality: String, val payload: JsonObject,
                       val skills: List<JsonObject>)
@@ -50,17 +59,25 @@ class GenerationMapper(private val installationId: String, private val markers: 
         val logEndedAt = instant(log?.endedAt)
         val endedAt = logEndedAt ?: instant(turn.endedAt)
         val durationSource = if (logEndedAt != null) "LOG_END" else "STRUCTURED_MESSAGE_END"
-        val workspacePath = turn.workspacePath ?: log?.workspacePath
-        val project = projects.resolve(workspacePath)
-        val invocations = linkedMapOf<String, Pair<StructuredScanner.SkillCall, SkillMarkerResolver.Marker>>()
+        val workspaceCandidates = listOfNotNull(turn.workspacePath, log?.workspacePath).filter { it.isNotBlank() }.distinct()
+        val project = workspaceCandidates.firstNotNullOfOrNull(projects::resolve)
+        if (project == null) diagnostic("workspace unresolved generationId=$id structured=${turn.workspacePath?.isNotBlank() == true} log=${log?.workspacePath?.isNotBlank() == true}")
+        data class ResolvedCall(val call: StructuredScanner.SkillCall, val marker: SkillMarkerResolver.Marker, val workspace: String?)
+        val invocations = linkedMapOf<String, ResolvedCall>()
         for (call in (turn.skillCallDetails + (log?.skillCallDetails ?: emptyList())).distinctBy { it.toolCallId }) {
-            val marker = markers.resolve(call.skillKey, workspacePath) ?: continue
-            invocations[call.toolCallId] = call to marker
+            val matched = workspaceCandidates.firstNotNullOfOrNull { candidate ->
+                markers.resolve(call.skillKey, candidate)?.let { it to candidate }
+            } ?: markers.resolve(call.skillKey, null)?.let { it to null }
+            if (matched == null) {
+                diagnostic("skill marker unresolved generationId=$id skillKey=${call.skillKey} workspaceStatus=${workspaceCandidates.map { markers.projectMarkerStatus(call.skillKey, it) }.distinct().joinToString(",").ifBlank { "workspace_missing" }}")
+                continue
+            }
+            invocations[call.toolCallId] = ResolvedCall(call, matched.first, matched.second)
         }
-        val skillKeys = JsonArray().also { array -> invocations.values.map { it.second.skillKey }.distinct().forEach(array::add) }
+        val skillKeys = JsonArray().also { array -> invocations.values.map { it.marker.skillKey }.distinct().forEach(array::add) }
         val skillInvocations = JsonArray()
         val skillEvents = mutableListOf<JsonObject>()
-        for ((call, marker) in invocations.values) {
+        for ((call, marker, workspacePath) in invocations.values) {
             val invokedAt = instant(call.invokedAt) ?: startedAt
             skillInvocations.add(JsonObject().apply {
                 addProperty("skillKey", marker.skillKey)

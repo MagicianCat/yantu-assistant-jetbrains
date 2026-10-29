@@ -36,6 +36,7 @@ class JetBrainsLogScanner(private val root: Path, private val now: () -> Instant
     private val finalUsage = Regex("Agent execution successful with usage:\\s*(\\{.*\\})")
     private val tool = Regex("tool-call-streaming-start\\s+开始解析:\\s*(\\S+)\\s+-\\s+(\\S+)")
     private val skillArgument = Regex("参数解析完成:\\s*(\\S+)\\s+-\\s*参数:\\s*command\\s+-\\s*值:\\s*([^\\s]+)")
+    private val checkpointWorkspace = Regex("CheckpointCoordinator\\] initialize START: conversationId=[^,\\s]+,\\s*workspace=(.+)$")
 
     fun scan(): Result {
         val dates = (0L..1L).map { LocalDate.ofInstant(now().minusSeconds(it * 86400), ZoneId.systemDefault()).toString() }.toSet()
@@ -65,9 +66,11 @@ class JetBrainsLogScanner(private val root: Path, private val now: () -> Instant
         val turns = linkedMapOf<String, MutableTurn>()
         val toolNames = mutableMapOf<String, String>()
         var active: String? = null
-        var workspacePath: String? = null
+        var workspacePath: String? = readHeadWorkspace(file)
         for (line in tailLines(file)) {
                 if (line.startsWith("Workspace Path:")) { workspacePath = line.removePrefix("Workspace Path:").trim(); continue }
+                val checkpoint = checkpointWorkspace.find(line)
+                if (checkpoint != null) { workspacePath = checkpoint.groupValues[1].trim(); continue }
                 val begun = start.find(line)
                 if (begun != null) {
                     active = begun.groupValues[2]
@@ -137,6 +140,16 @@ class JetBrainsLogScanner(private val root: Path, private val now: () -> Instant
         return runCatching { LocalDateTime.parse("${date}T${match.groupValues[2]}.$millis", DateTimeFormatter.ISO_LOCAL_DATE_TIME)
             .atZone(ZoneId.systemDefault()).toInstant().toString() }.getOrNull()
     }
+
+    private fun readHeadWorkspace(file: Path): String? = runCatching {
+        FileChannel.open(file, StandardOpenOption.READ).use { channel ->
+            val buffer = ByteBuffer.allocate(minOf(channel.size(), 4096).toInt())
+            channel.read(buffer)
+            buffer.flip()
+            val first = StandardCharsets.UTF_8.decode(buffer).toString().substringBefore('\n').trimEnd('\r')
+            first.takeIf { it.startsWith("Workspace Path:") }?.removePrefix("Workspace Path:")?.trim()?.takeIf { it.isNotBlank() }
+        }
+    }.getOrNull()
 
     private fun tailLines(path: Path): List<String> = runCatching {
         FileChannel.open(path, StandardOpenOption.READ).use { channel ->
