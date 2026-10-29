@@ -20,12 +20,14 @@ class JetBrainsLogScanner(private val root: Path, private val now: () -> Instant
                     val totalTokens: Long?, val toolCalls: Int, val conversationId: String? = null,
                     val startedAt: String? = null, val endedAt: String? = null,
                     val workspaceHash: String? = null, val exactUsage: Boolean = false,
-                    val workspacePath: String? = null)
+                    val workspacePath: String? = null,
+                    val skillCallDetails: List<StructuredScanner.SkillCall> = emptyList())
     data class Result(val files: Int, val turns: Map<String, Turn>)
     private data class MutableTurn(var state: String = "RUNNING", var input: Long? = null, var output: Long? = null,
                                    var total: Long? = null, val tools: MutableSet<String> = mutableSetOf(),
                                    var conversationId: String? = null, var startedAt: String? = null,
-                                   var endedAt: String? = null, var workspaceHash: String? = null, var exactUsage: Boolean = false)
+                                   var endedAt: String? = null, var workspaceHash: String? = null, var exactUsage: Boolean = false,
+                                   val skills: MutableMap<String, StructuredScanner.SkillCall> = linkedMapOf())
     private data class Cached(val size: Long, val modified: Long, val turns: Map<String, Turn>)
     private val cache = mutableMapOf<Path, Cached>()
     private val start = Regex("\\[AgentReporter\\] onAgentStart:.*?conversationId=([^\\s]+).*?requestId=([^\\s]+)")
@@ -33,6 +35,7 @@ class JetBrainsLogScanner(private val root: Path, private val now: () -> Instant
     private val step = Regex("notifyStepEnd,\\s*step:\\s*\\d+,\\s*requestId:\\s*([^,\\s]+).*?usage:\\s*(\\{.*?\\})(?:,\\s*isMaxTokenLimit|$)")
     private val finalUsage = Regex("Agent execution successful with usage:\\s*(\\{.*\\})")
     private val tool = Regex("tool-call-streaming-start\\s+开始解析:\\s*(\\S+)\\s+-\\s+(\\S+)")
+    private val skillArgument = Regex("参数解析完成:\\s*(\\S+)\\s+-\\s*参数:\\s*command\\s+-\\s*值:\\s*([^\\s]+)")
 
     fun scan(): Result {
         val dates = (0L..1L).map { LocalDate.ofInstant(now().minusSeconds(it * 86400), ZoneId.systemDefault()).toString() }.toSet()
@@ -60,6 +63,7 @@ class JetBrainsLogScanner(private val root: Path, private val now: () -> Instant
 
     private fun parseFile(file: Path): Map<String, Turn> {
         val turns = linkedMapOf<String, MutableTurn>()
+        val toolNames = mutableMapOf<String, String>()
         var active: String? = null
         var workspacePath: String? = null
         for (line in tailLines(file)) {
@@ -80,6 +84,7 @@ class JetBrainsLogScanner(private val root: Path, private val now: () -> Instant
                     turn.state = if (ended.groupValues[3] == "false") "COMPLETED" else "FAILED"
                     turn.conversationId = ended.groupValues[1]
                     turn.endedAt = lineTimestamp(line) ?: turn.endedAt
+                    if (active == id) active = null
                     continue
                 }
                 val usage = step.find(line)
@@ -107,10 +112,22 @@ class JetBrainsLogScanner(private val root: Path, private val now: () -> Instant
                     continue
                 }
                 val called = tool.find(line)
-                if (called != null && active != null) turns[active]?.tools?.add(called.groupValues[1])
+                if (called != null && active != null) {
+                    turns[active]?.tools?.add(called.groupValues[1])
+                    toolNames[called.groupValues[1]] = called.groupValues[2]
+                    continue
+                }
+                val skill = skillArgument.find(line)
+                if (skill != null && toolNames.remove(skill.groupValues[1]) == "use_skill") {
+                    val key = skill.groupValues[2]
+                    val running = turns.values.filter { it.conversationId != null && it.state == "RUNNING" }
+                    if (running.size == 1 && key.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")))
+                        running.single().skills[skill.groupValues[1]] = StructuredScanner.SkillCall(key, skill.groupValues[1], lineTimestamp(line))
+                }
             }
         return turns.mapValues { (id, value) -> Turn(id, value.state, value.input, value.output, value.total, value.tools.size,
-            value.conversationId, value.startedAt, value.endedAt, value.workspaceHash, value.exactUsage, workspacePath) }
+            value.conversationId, value.startedAt, value.endedAt, value.workspaceHash, value.exactUsage, workspacePath,
+            value.skills.values.toList()) }
     }
 
     private fun lineTimestamp(line: String): String? {

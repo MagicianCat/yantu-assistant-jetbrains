@@ -24,6 +24,19 @@ object TelemetryPipelineFixture {
                 filesModified = 2, startedAt = "2026-10-27T02:00:00Z")
             val mapped1 = mapper.structured(first, null)!!
             val mapped2 = mapper.structured(second, null)!!
+            check(mapped1.payload.get("sessionId").asString == "conversation-a")
+            check(mapped1.payload.get("clientSessionId") == null)
+            check(mapped1.payload.get("projectName").asString == "project")
+            check(mapped1.payload.get("projectSource").asString == "LOCAL")
+            check(mapped1.payload.getAsJsonArray("skillKeys")[0].asString == "security-review")
+            check(mapped1.payload.getAsJsonArray("skillInvocations").size() == 1)
+            val localProjectKey = mapped1.payload.get("projectKey").asString
+            check(localProjectKey == ProjectResolver("plugin-install").resolve(workspace.toString())!!.key)
+            val gitConfig = workspace.resolve(".git/config")
+            Files.createDirectories(gitConfig.parent)
+            Files.writeString(gitConfig, "[remote \"origin\"]\n  url = git@example.com:team/sample.git\n")
+            val gitProject = ProjectResolver("plugin-install").resolve(workspace.toString())!!
+            check(gitProject.name == "sample" && gitProject.source == "GIT_REMOTE" && gitProject.key != localProjectKey)
             check(mapped1.generationId != mapped2.generationId)
             check(mapped1.skills.size == 1 && mapped2.skills.isEmpty())
             check(mapped1.payload.getAsJsonObject("code").get("linesAdded").asInt == 0)

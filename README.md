@@ -16,12 +16,16 @@
 6. 在平台后台核对 Generation 与 SkillUsage：同一轮的 request、Token、代码行数及平台 Skill 次数一致。请特别检查非平台安装的 Skill 不产生 SkillUsage。
 
 若上传失败，状态页会显示接口路径、HTTP 状态或简短异常。不要发送访问令牌、原始对话、源码或完整本地日志。
+若需要定位间歇性失败，可在 IDEA **Help → Show Log in Explorer** 打开 `idea.log`，仅搜索 `telemetry response` 与 `telemetry upload` 两类行；它们包含接口路径、HTTP 状态、后端错误码/请求 ID、稳定记录 ID、revision 和尝试次数，不记录请求正文或令牌。分享时只截取相关行。
 
 ## 数据范围与口径
 
 - 只读 `%LOCALAPPDATA%/CodeBuddyExtension/Data/*/JetBrains/*` 的最近 7 天结构化 history、messages 中的 Tool 元数据及 file-tree 的 accepted 版本；日志读取 `Logs/JetBrains` 最近两天的有界尾部。每个 JSON 最大 8 MiB，最多 500 会话；日志每文件最多 2 MiB、最多 30 文件。
 - 按 workspaceHash、conversationId 和 requestId 生成稳定 Generation ID；结构化 usage 优先，日志只作补充和冲突标记，不相加。file-tree 只按精确 requestId 计代码增删，按文件类型聚合后上报，不上传文件路径或源码。
+- Generation HTTP 请求使用 `sessionId`（后端入口再映射为服务层的 `clientSessionId`）。有可用工作区时上传项目标识：优先从 Git origin 得到稳定 `projectKey` 和仓库名；否则以本机安装 ID 与工作区路径计算本地项目键，并使用目录名。没有可靠工作区时项目字段为空。
 - 仅将带 `.yantu-platform-skill.json` 标记的 Skill 计入平台 SkillUsage；SkillUsage 使用稳定 UUID 和 `Idempotency-Key`。Generation 使用单调 revision，后端按 `generationId` upsert。
+- Skill 展示名及研发阶段由后端根据上传的 `skillKey` 关联平台 Skill 推导。没有平台标记、未识别出调用或平台中不存在该 `skillKey` 时，这两项会为空。
+- Skill 调用可从结构化 Tool 元数据或 JetBrains 日志的 `use_skill` 参数识别；仍须找到平台安装标记才会上报。
 - 本地持久化目录为 `%LOCALAPPDATA%/YantuAssistantJetBrains/`。除平台协议要求的项目目录元数据外，队列不保存对话正文、源码快照或令牌；refreshToken 仍只在 IDEA PasswordSafe 中。
 - 采集队列跨重启恢复。HTTP 401 尝试刷新令牌一次，403 保留队列，网络或 5xx 有界退避。只有 2xx 响应会确认上传。
 

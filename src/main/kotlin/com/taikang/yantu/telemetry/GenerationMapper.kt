@@ -39,6 +39,7 @@ class SkillMarkerResolver(private val home: Path = Path.of(System.getProperty("u
 
 /** Maps one request to the exact backend DTO; no message text or file path enters the payload. */
 class GenerationMapper(private val installationId: String, private val markers: SkillMarkerResolver = SkillMarkerResolver()) {
+    private val projects = ProjectResolver(installationId)
     data class Mapped(val generationId: String, val quality: String, val payload: JsonObject,
                       val skills: List<JsonObject>)
 
@@ -50,8 +51,9 @@ class GenerationMapper(private val installationId: String, private val markers: 
         val endedAt = logEndedAt ?: instant(turn.endedAt)
         val durationSource = if (logEndedAt != null) "LOG_END" else "STRUCTURED_MESSAGE_END"
         val workspacePath = turn.workspacePath ?: log?.workspacePath
+        val project = projects.resolve(workspacePath)
         val invocations = linkedMapOf<String, Pair<StructuredScanner.SkillCall, SkillMarkerResolver.Marker>>()
-        for (call in turn.skillCallDetails) {
+        for (call in (turn.skillCallDetails + (log?.skillCallDetails ?: emptyList())).distinctBy { it.toolCallId }) {
             val marker = markers.resolve(call.skillKey, workspacePath) ?: continue
             invocations[call.toolCallId] = call to marker
         }
@@ -104,6 +106,7 @@ class GenerationMapper(private val installationId: String, private val markers: 
         val payload = JsonObject().apply {
             addProperty("generationId", id); addProperty("sessionId", turn.conversationId)
             addProperty("clientInstallationId", installationId)
+            project?.let { addProperty("projectKey", it.key); addProperty("projectName", it.name); addProperty("projectSource", it.source) }
             addProperty("startedAt", startedAt.toString()); endedAt?.let { addProperty("endedAt", it.toString()) }
             endedAt?.let { addProperty("durationMs", (it.toEpochMilli() - startedAt.toEpochMilli()).coerceAtLeast(0))
                 addProperty("durationSource", durationSource) }
@@ -125,9 +128,11 @@ class GenerationMapper(private val installationId: String, private val markers: 
         val startedAt = instant(turn.startedAt) ?: return null
         val endedAt = instant(turn.endedAt)
         val id = generationId(turn.workspaceHash.orEmpty(), conversationId, turn.requestId)
+        val project = projects.resolve(turn.workspacePath)
         val payload = JsonObject().apply {
             addProperty("generationId", id); addProperty("sessionId", conversationId)
             addProperty("clientInstallationId", installationId)
+            project?.let { addProperty("projectKey", it.key); addProperty("projectName", it.name); addProperty("projectSource", it.source) }
             addProperty("startedAt", startedAt.toString()); endedAt?.let { addProperty("endedAt", it.toString()) }
             endedAt?.let { addProperty("durationMs", (it.toEpochMilli() - startedAt.toEpochMilli()).coerceAtLeast(0))
                 addProperty("durationSource", "LOG_END") }

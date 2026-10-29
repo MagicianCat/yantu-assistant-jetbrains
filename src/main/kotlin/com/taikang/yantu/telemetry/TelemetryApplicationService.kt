@@ -108,6 +108,7 @@ class TelemetryApplicationService : Disposable {
         pending = store.stats().first
         val platform = YantuPlatformService.get()
         val result = UploadWorker(store, { platform.snapshot().state == "已登录" },
+            { detail -> LOG.warn(detail) },
             { path, body, key -> platform.postTelemetry(path, body, key) }).flushOnce()
         if (result.uploaded > 0) lastUploadAt = Instant.now().toString()
         if (result.error != null) lastError = result.error

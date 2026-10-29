@@ -11,6 +11,7 @@ import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
+import com.intellij.openapi.diagnostic.Logger
 import java.net.URI
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
@@ -160,6 +161,16 @@ class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Setti
             token = accessToken ?: throw IllegalStateException("登录已失效，遥测保留在本地")
             response = postWithToken(path, body, token, idempotencyKey)
         }
+        if (response.statusCode() !in 200..299) {
+            val error = runCatching { JsonParser.parseString(response.body()).asJsonObject }.getOrNull()
+            val code = error?.get("code")?.let { runCatching { it.asString }.getOrNull() }
+                ?.takeIf { it.matches(Regex("[A-Za-z0-9_]{1,64}")) }
+            val requestId = error?.get("requestId")?.let { runCatching { it.asString }.getOrNull() }
+                ?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,64}")) }
+                ?: response.headers().firstValue("X-Request-Id").orElse("")
+                    .takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,64}")) }
+            LOG.warn("telemetry response path=$path status=${response.statusCode()} code=${code ?: "unknown"} requestId=${requestId ?: "unknown"}")
+        }
         return response.statusCode()
     }
 
@@ -212,5 +223,8 @@ class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Setti
         return uri
     }
 
-    companion object { fun get(): YantuPlatformService = ApplicationManager.getApplication().getService(YantuPlatformService::class.java) }
+    companion object {
+        private val LOG = Logger.getInstance(YantuPlatformService::class.java)
+        fun get(): YantuPlatformService = ApplicationManager.getApplication().getService(YantuPlatformService::class.java)
+    }
 }

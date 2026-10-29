@@ -6,6 +6,7 @@ import com.google.gson.JsonObject
 class UploadWorker(
     private val outbox: DurableOutbox,
     private val loggedIn: () -> Boolean,
+    private val reportError: (String) -> Unit = {},
     private val send: (String, JsonObject, String?) -> Int,
 ) {
     data class Result(val uploaded: Int, val error: String? = null)
@@ -23,11 +24,13 @@ class UploadWorker(
                     uploaded++
                 } else {
                     lastError = "$path HTTP $status"
+                    reportError("telemetry upload rejected path=$path recordId=${item.id.take(64)} revision=${item.revision} status=$status attempt=${item.attempts + 1}")
                     outbox.retry(item.id, lastError, status)
                     if (status == 401 || status == 403) break
                 }
             } catch (error: Exception) {
-                lastError = "$path ${error.javaClass.simpleName}: ${(error.message ?: "").take(100)}"
+                lastError = "$path ${error.javaClass.simpleName}"
+                reportError("telemetry upload exception path=$path recordId=${item.id.take(64)} revision=${item.revision} type=${error.javaClass.simpleName} attempt=${item.attempts + 1}")
                 outbox.retry(item.id, lastError)
                 break
             }

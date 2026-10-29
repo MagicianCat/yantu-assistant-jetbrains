@@ -77,7 +77,10 @@ object EnvironmentSnapshotReader {
             latestState = scan.latest?.state ?: "—",
             latestUsage = scan.latest?.let { "输入 ${it.inputTokens ?: "—"} / 输出 ${it.outputTokens ?: "—"} / 总计 ${it.totalTokens ?: "—"}" } ?: "—",
             latestTools = scan.latest?.toolCalls ?: 0,
-            latestSkills = scan.latest?.skillCalls ?: 0,
+            latestSkills = scan.latest?.let { latest ->
+                (latest.skillCallDetails + (logScan.turns[latest.requestId]?.skillCallDetails ?: emptyList()))
+                    .distinctBy { it.toolCallId }.size
+            } ?: 0,
             latestCode = scan.latest?.let { "+${it.addedLines} / -${it.removedLines}，${it.changedFiles} 文件" } ?: "—",
             platformUrl = platform.apiBaseUrl,
             loginState = platform.state,

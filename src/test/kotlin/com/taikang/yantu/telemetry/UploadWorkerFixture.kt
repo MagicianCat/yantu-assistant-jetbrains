@@ -14,12 +14,14 @@ object UploadWorkerFixture {
             val offline = UploadWorker(outbox, { false }) { _, _, _ -> error("must not send") }
             check(offline.flushOnce(readyAt).uploaded == 0 && outbox.stats().first == 1)
             var attempts = 0
-            val worker = UploadWorker(outbox, { true }) { path, body, key ->
+            val errors = mutableListOf<String>()
+            val worker = UploadWorker(outbox, { true }, errors::add) { path, body, key ->
                 check(path == "/telemetry/generations" && body.get("revision").asInt == 1 && key == null)
                 attempts++
                 if (attempts == 1) 503 else 200
             }
             check(worker.flushOnce(readyAt).error?.contains("503") == true)
+            check(errors.single().contains("recordId=generation:g-1") && errors.single().contains("status=503"))
             check(outbox.stats().first == 1)
             check(worker.flushOnce(readyAt + 400_000).uploaded == 1)
             check(outbox.stats().first == 0)
