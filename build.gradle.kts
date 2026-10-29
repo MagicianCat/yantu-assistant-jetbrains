@@ -47,3 +47,21 @@ tasks.register<JavaExec>("verifyPrivateRoute") {
     classpath = sourceSets.test.get().runtimeClasspath
     mainClass = "com.taikang.yantu.platform.PlatformHttpClientFixture"
 }
+
+tasks.register<JavaExec>("verifyTelemetryPipeline") {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass = "com.taikang.yantu.telemetry.TelemetryPipelineFixture"
+}
+
+tasks.register<JavaExec>("verifyTelemetryRequest") {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass = "com.taikang.yantu.platform.TelemetryRequestFixture"
+}
+
+tasks.register<JavaExec>("verifyUploadWorker") {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass = "com.taikang.yantu.telemetry.UploadWorkerFixture"
+}

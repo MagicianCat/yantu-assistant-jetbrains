@@ -17,6 +17,7 @@ import com.intellij.ui.jcef.JBCefJSQuery
 import com.taikang.yantu.diagnostics.EnvironmentSnapshot
 import com.taikang.yantu.diagnostics.EnvironmentSnapshotReader
 import com.taikang.yantu.platform.YantuPlatformService
+import com.taikang.yantu.telemetry.TelemetryApplicationService
 import java.awt.BorderLayout
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JButton
@@ -28,6 +29,7 @@ import javax.swing.SwingUtilities
 
 class YantuToolWindowFactory : ToolWindowFactory, DumbAware {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
+        TelemetryApplicationService.get().startOnce()
         val view = if (runCatching { JBCefApp.isSupported() }.getOrDefault(false)) {
             runCatching { JcefStatusView() }.getOrElse { error ->
                 LOG.warn("研途助手 JCEF 初始化失败，启用 Swing 状态页", error)
@@ -60,7 +62,7 @@ class YantuToolWindowFactory : ToolWindowFactory, DumbAware {
                     val command = runCatching { JsonParser.parseString(raw).asJsonObject }.getOrNull()
                     val type = command?.get("type")?.asString
                     if (type == "ready" || type == "status") refresh()
-                    if (type in setOf("configure", "login", "logout", "verify-api", "test-connection")) {
+                    if (type in setOf("configure", "login", "logout", "verify-api", "test-connection", "sync-now")) {
                         ApplicationManager.getApplication().executeOnPooledThread {
                             val service = YantuPlatformService.get()
                             runCatching {
@@ -70,6 +72,7 @@ class YantuToolWindowFactory : ToolWindowFactory, DumbAware {
                                     "logout" -> service.logout()
                                     "verify-api" -> service.verifyApi()
                                     "test-connection" -> service.testConnection(command?.get("apiBaseUrl")?.asString ?: "")
+                                    "sync-now" -> TelemetryApplicationService.get().syncNow()
                                 }
                             }.onFailure(service::reportFailure)
                             refresh()
@@ -159,6 +162,11 @@ class YantuToolWindowFactory : ToolWindowFactory, DumbAware {
                         平台地址：${snapshot.platformUrl}
                         登录状态：${snapshot.loginState}
                         登录信息：${snapshot.loginMessage}
+                        采集状态：${snapshot.telemetryMode}
+                        待上传：${snapshot.pendingUploads}
+                        最近采集：${snapshot.lastScanAt}
+                        最近上传：${snapshot.lastUploadAt}
+                        采集/上传错误：${snapshot.telemetryError}
                         设备码：${snapshot.userCode}
                         授权链接：${snapshot.verificationUri}
                         检查时间：${snapshot.checkedAt}

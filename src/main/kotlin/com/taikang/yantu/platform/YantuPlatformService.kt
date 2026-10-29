@@ -110,7 +110,9 @@ class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Setti
         val token = PasswordSafe.instance.getPassword(credentialKey) ?: return
         val response = post("/auth/refresh", JsonObject().apply { addProperty("refreshToken", token) })
         if (response.statusCode() in 200..299) acceptTokens(parseObject(response.body()), token)
-        else { PasswordSafe.instance.set(credentialKey, null); fail("登录已失效，请重新授权") }
+        else if (response.statusCode() == 400 || response.statusCode() == 401) {
+            PasswordSafe.instance.set(credentialKey, null); fail("登录已失效，请重新授权")
+        } else throw IllegalStateException("刷新登录失败：HTTP ${response.statusCode()}")
     }
 
     fun testConnection(rawApiBaseUrl: String) {
@@ -123,7 +125,7 @@ class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Setti
         val response = client.send(request, HttpResponse.BodyHandlers.discarding())
         val elapsed = Duration.ofNanos(System.nanoTime() - started).toMillis()
         val route = client.route(uri)
-        state = if (response.statusCode() == 401 || response.statusCode() in 200..299) "平台可达" else "连接异常"
+        if (state != "已登录") state = if (response.statusCode() == 401 || response.statusCode() in 200..299) "平台可达" else "连接异常"
         message = "GET /auth/me：HTTP ${response.statusCode()}，${elapsed}ms，请求路由=$route${responseOrigin(response)}"
     }
 
@@ -145,6 +147,25 @@ class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Setti
             .header("Authorization", "Bearer $token").GET().build()
         return client.send(request, HttpResponse.BodyHandlers.ofString())
     }
+
+    /** Used only by the telemetry worker. 2xx is the sole acknowledgement. */
+    fun postTelemetry(path: String, body: JsonObject, idempotencyKey: String? = null): Int {
+        require(path == "/telemetry/generations" || path == "/telemetry/skill-usage-events")
+        if (accessToken == null) restore()
+        var token = accessToken ?: throw IllegalStateException("未登录，遥测保留在本地")
+        var response = postWithToken(path, body, token, idempotencyKey)
+        if (response.statusCode() == 401) {
+            accessToken = null
+            restore()
+            token = accessToken ?: throw IllegalStateException("登录已失效，遥测保留在本地")
+            response = postWithToken(path, body, token, idempotencyKey)
+        }
+        return response.statusCode()
+    }
+
+    private fun postWithToken(path: String, body: JsonObject, token: String, idempotencyKey: String?): HttpResponse<String> =
+        client.send(TelemetryRequestFactory.post(settings.apiBaseUrl, path, body, token, idempotencyKey),
+            HttpResponse.BodyHandlers.ofString())
 
     fun logout() {
         currentAttempt.set(null)

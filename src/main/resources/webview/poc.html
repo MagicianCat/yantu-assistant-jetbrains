@@ -44,6 +44,12 @@
       <dt>检查时间</dt><dd id="checked">正在检查…</dd>
     </dl>
     <button id="refresh" type="button">刷新状态</button>
+    <button id="syncNow" type="button">立即同步</button>
+    <dl style="margin-top:14px"><dt>采集状态</dt><dd id="telemetryMode">—</dd>
+      <dt>待上传</dt><dd id="pendingUploads">0</dd>
+      <dt>采集/上传错误</dt><dd id="telemetryError">—</dd>
+      <dt>最近扫描</dt><dd id="lastScanAt">—</dd>
+      <dt>最近上传</dt><dd id="lastUploadAt">—</dd></dl>
   </div>
   <div class="card" style="margin-top:16px">
     <h2 style="margin-top:0;font-size:16px">平台登录</h2>
@@ -83,6 +89,11 @@
         tools: status.latestTools + " / " + status.latestSkills,
         code: status.latestCode,
         checked: status.checkedAt,
+        telemetryMode: status.telemetryMode,
+        pendingUploads: String(status.pendingUploads),
+        telemetryError: status.telemetryError || "—",
+        lastScanAt: status.lastScanAt || "—",
+        lastUploadAt: status.lastUploadAt || "—",
         loginState: status.loginState,
         loginMessage: status.loginMessage,
         userCode: status.userCode || "—",
@@ -95,6 +106,7 @@
       authLink.href = status.verificationUri || "#";
       authLink.textContent = status.verificationUri || "—";
     };
+    document.getElementById('syncNow').addEventListener('click', function () { window.yantuHost.postMessage({ type: 'sync-now' }); });
     document.getElementById('refresh').addEventListener('click', function () {
       window.yantuHost.postMessage({ type: 'status' });
     });
@@ -106,7 +118,7 @@
         window.yantuHost.postMessage({ type: type, apiBaseUrl: document.getElementById('apiBaseUrl').value });
       });
     }
-    setInterval(function () { window.yantuHost.postMessage({ type: 'status' }); }, 4000);
+    setInterval(function () { window.yantuHost.postMessage({ type: 'status' }); }, 10000);
     window.yantuHost.postMessage({ type: 'ready' });
   </script>
 </body>

@@ -8,6 +8,7 @@ import java.nio.file.Path
 import java.time.Instant
 import com.taikang.yantu.telemetry.StructuredScanner
 import com.taikang.yantu.telemetry.JetBrainsLogScanner
+import com.taikang.yantu.telemetry.TelemetryApplicationService
 import com.taikang.yantu.platform.YantuPlatformService
 
 data class EnvironmentSnapshot(
@@ -37,6 +38,11 @@ data class EnvironmentSnapshot(
     val logRequests: Int,
     val latestLogState: String,
     val tokenMismatch: Boolean,
+    val telemetryMode: String,
+    val pendingUploads: Int,
+    val telemetryError: String,
+    val lastScanAt: String,
+    val lastUploadAt: String,
 )
 
 /** Reads only directory metadata. No account names or absolute paths leave this class. */
@@ -49,8 +55,9 @@ object EnvironmentSnapshotReader {
             ?: Path.of(System.getProperty("user.home"), "AppData", "Local")
         val root = localAppData.resolve("CodeBuddyExtension")
         val dataRoot = root.resolve("Data")
-        val scan = StructuredScanner(dataRoot).scan()
-        val logScan = JetBrainsLogScanner(root.resolve("Logs").resolve("JetBrains")).scan()
+        val telemetry = TelemetryApplicationService.get().snapshot()
+        val scan = telemetry.structured ?: StructuredScanner(dataRoot).scan()
+        val logScan = telemetry.logs ?: JetBrainsLogScanner(root.resolve("Logs").resolve("JetBrains")).scan()
         val platformService = YantuPlatformService.get()
         platformService.restoreOnceInBackground()
         val platform = platformService.snapshot()
@@ -83,6 +90,11 @@ object EnvironmentSnapshotReader {
             tokenMismatch = scan.latest?.let { latest ->
                 logScan.turns[latest.requestId]?.totalTokens?.let { it != latest.totalTokens }
             } ?: false,
+            telemetryMode = telemetry.mode,
+            pendingUploads = telemetry.pending,
+            telemetryError = telemetry.lastError,
+            lastScanAt = telemetry.lastScanAt,
+            lastUploadAt = telemetry.lastUploadAt,
         )
     }
 

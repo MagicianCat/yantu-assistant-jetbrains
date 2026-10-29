@@ -2,12 +2,13 @@
     <id>com.taikang.yantu.assistant.jetbrains</id>
     <name>研途助手（IDEA POC）</name>
     <vendor>内部研发平台</vendor>
-    <description><![CDATA[研途助手 IDEA 插件 P0-C/D 登录验证版：JetBrains 日志诊断与平台设备码登录。]]></description>
+    <description><![CDATA[研途助手 IDEA 插件 P0-C/D 遥测闭环验证版：JetBrains 本地采集、持久队列与平台上传。]]></description>
     <depends>com.intellij.modules.platform</depends>
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="研途助手"
                     anchor="left"
                     icon="/icons/yantu.svg"
                     factoryClass="com.taikang.yantu.ui.YantuToolWindowFactory"/>
+        <postStartupActivity implementation="com.taikang.yantu.startup.YantuStartupActivity"/>
     </extensions>
 </idea-plugin>
