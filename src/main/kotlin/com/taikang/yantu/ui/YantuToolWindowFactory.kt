@@ -30,14 +30,16 @@ import javax.swing.SwingUtilities
 class YantuToolWindowFactory : ToolWindowFactory, DumbAware {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         TelemetryApplicationService.get().startOnce()
-        val view = if (runCatching { JBCefApp.isSupported() }.getOrDefault(false)) {
-            runCatching { JcefStatusView() }.getOrElse { error ->
-                LOG.warn("研途助手 JCEF 初始化失败，启用 Swing 状态页", error)
-                SwingStatusView()
+        if (runCatching { JBCefApp.isSupported() }.getOrDefault(false)) {
+            val chat = runCatching { JcefChatView(project) }.getOrNull()
+            if (chat != null) {
+                val content = ContentFactory.getInstance().createContent(chat.component, null, false)
+                content.setDisposer(chat)
+                toolWindow.contentManager.addContent(content)
+                return
             }
-        } else {
-            SwingStatusView()
         }
+        val view = SwingStatusView()
         val content = ContentFactory.getInstance().createContent(view.component, null, false)
         content.setDisposer(view)
         toolWindow.contentManager.addContent(content)
@@ -138,12 +140,12 @@ class YantuToolWindowFactory : ToolWindowFactory, DumbAware {
                     }
                 SwingUtilities.invokeLater {
                     if (!disposed.get()) text.text = """
-                        研途助手 · IDEA POC
+                        研途助手 · 功能受限（仅诊断）
 
                         IDEA：${snapshot.ideaVersion}
                         插件：${snapshot.pluginVersion}
                         Java：${snapshot.javaVersion}
-                        JCEF：不可用，当前为 Swing 状态页
+                        JCEF：完整助手需要 JCEF；当前为 Swing 诊断页
                         TkCoding 日志目录：${snapshot.logsStatus}
                         TkCoding 数据目录：${snapshot.dataStatus}
                         JetBrains 数据分区：${snapshot.dataPartitions}

@@ -2,6 +2,7 @@ package com.taikang.yantu.platform
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.JsonElement
 import com.intellij.credentialStore.CredentialAttributes
 import com.intellij.credentialStore.Credentials
 import com.intellij.ide.BrowserUtil
@@ -15,6 +16,7 @@ import com.intellij.openapi.diagnostic.Logger
 import java.net.URI
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -27,8 +29,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Service(Service.Level.APP)
 @State(name = "YantuAssistantPlatform", storages = [Storage("yantu-assistant-platform.xml")])
 class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Settings> {
-    class Settings { var apiBaseUrl: String = "" }
-    data class Snapshot(val apiBaseUrl: String, val state: String, val userCode: String?, val verificationUri: String?, val message: String)
+    class Settings {
+        var apiBaseUrl: String = if (WindowsPlatformConfig.enabled()) WindowsPlatformConfig.API_BASE_URL else ""
+        var webBaseUrl: String = if (WindowsPlatformConfig.enabled()) WindowsPlatformConfig.WEB_BASE_URL else ""
+    }
+    data class Snapshot(val apiBaseUrl: String, val webBaseUrl: String, val state: String, val userCode: String?, val verificationUri: String?, val message: String)
     private data class Attempt(val deviceCode: String, val verifier: String, val expiresAt: Instant, val pollSeconds: Long, val uri: URI)
     private val client = PlatformHttpClient()
     private val random = SecureRandom()
@@ -37,16 +42,34 @@ class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Setti
     private val credentialKey = CredentialAttributes("com.taikang.yantu.assistant.jetbrains.refreshToken")
     @Volatile private var settings = Settings()
     @Volatile private var state = "未登录"
-    @Volatile private var message = "请先配置平台 API 地址"
+    @Volatile private var message = if (WindowsPlatformConfig.enabled()) "平台地址已内置，可以开始登录" else "请先配置平台 API 地址"
     @Volatile private var userCode: String? = null
     @Volatile private var verificationUri: String? = null
     @Volatile private var accessToken: String? = null
 
     override fun getState(): Settings = settings
-    override fun loadState(state: Settings) { settings = state }
-    fun snapshot(): Snapshot = Snapshot(settings.apiBaseUrl, state, userCode, verificationUri, message)
+    override fun loadState(state: Settings) {
+        if (WindowsPlatformConfig.enabled()) {
+            if (state.apiBaseUrl.isNotBlank() && state.apiBaseUrl != WindowsPlatformConfig.API_BASE_URL)
+                PasswordSafe.instance.set(credentialKey, null)
+            state.apiBaseUrl = WindowsPlatformConfig.API_BASE_URL
+            state.webBaseUrl = WindowsPlatformConfig.WEB_BASE_URL
+            message = "平台地址已内置，可以开始登录"
+        }
+        settings = state
+    }
+    fun snapshot(): Snapshot = Snapshot(settings.apiBaseUrl, settings.webBaseUrl, state, userCode, verificationUri, message)
+
+    fun configureWeb(raw: String) {
+        require(!WindowsPlatformConfig.enabled()) { "Windows 版平台地址不可修改" }
+        val uri = URI.create(raw.trim().trimEnd('/'))
+        require(uri.host != null && uri.userInfo == null && uri.fragment == null && uri.query == null &&
+            (uri.scheme == "https" || uri.scheme == "http" && PlatformHttpClient.isPrivateHost(uri.host))) { "网页地址格式无效" }
+        settings.webBaseUrl = uri.toString()
+    }
 
     fun configure(raw: String) {
+        require(!WindowsPlatformConfig.enabled()) { "Windows 版平台地址不可修改" }
         val uri = validateBase(raw)
         if (settings.apiBaseUrl == uri.toString().trimEnd('/')) return
         currentAttempt.set(null)
@@ -177,6 +200,54 @@ class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Setti
     private fun postWithToken(path: String, body: JsonObject, token: String, idempotencyKey: String?): HttpResponse<String> =
         client.send(TelemetryRequestFactory.post(settings.apiBaseUrl, path, body, token, idempotencyKey),
             HttpResponse.BodyHandlers.ofString())
+
+    /** Authorized platform calls for chat, Skill and Wiki; credentials never enter JCEF. */
+    fun authorizedJson(method: String, path: String, body: JsonObject? = null): JsonElement? {
+        val response = authorized(method, path, body?.toString(), HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() == 204 || response.body().isBlank()) return null
+        return JsonParser.parseString(response.body())
+    }
+
+    fun authorizedBytes(method: String, path: String, body: JsonObject? = null): ByteArray =
+        authorized(method, path, body?.toString(), HttpResponse.BodyHandlers.ofByteArray()).body()
+
+    fun openEvents(path: String, lastEventId: String? = null): InputStream {
+        val response = authorized("GET", path, null, HttpResponse.BodyHandlers.ofInputStream(), lastEventId, true)
+        return response.body()
+    }
+
+    private fun <T> authorized(method: String, path: String, body: String?, handler: HttpResponse.BodyHandler<T>,
+                               lastEventId: String? = null, streaming: Boolean = false): HttpResponse<T> {
+        require(path.startsWith("/agent/") || path.startsWith("/bundles/") || path == "/bundles" ||
+            path.startsWith("/wiki/") || path == "/wiki/documents:download" || path == "/skill-updates:check")
+        if (accessToken == null) restore()
+        fun send(token: String): HttpResponse<T> {
+            val builder = HttpRequest.newBuilder(url(path)).header("Authorization", "Bearer $token")
+            if (!streaming) builder.timeout(Duration.ofSeconds(30))
+            if (lastEventId != null) builder.header("Last-Event-ID", lastEventId)
+            if (body != null) builder.header("Content-Type", "application/json")
+            val request = when (method) {
+                "GET" -> builder.GET().build()
+                "DELETE" -> builder.DELETE().build()
+                "POST" -> builder.POST(HttpRequest.BodyPublishers.ofString(body ?: "{}")).build()
+                else -> throw IllegalArgumentException("不支持的请求方法")
+            }
+            return client.send(request, handler)
+        }
+        var response = send(accessToken ?: throw IllegalStateException("请先登录"))
+        if (response.statusCode() == 401) {
+            if (response.body() is InputStream) (response.body() as InputStream).close()
+            accessToken = null
+            restore()
+            response = send(accessToken ?: throw IllegalStateException("登录已失效"))
+        }
+        if (response.statusCode() !in 200..299) {
+            val status = response.statusCode()
+            if (response.body() is InputStream) (response.body() as InputStream).close()
+            throw IllegalStateException("平台请求失败 HTTP $status: $path")
+        }
+        return response
+    }
 
     fun logout() {
         currentAttempt.set(null)
