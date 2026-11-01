@@ -29,7 +29,13 @@ dependencies {
     testRuntimeOnly(kotlin("stdlib"))
     testRuntimeOnly("com.google.code.gson:gson:2.11.0")
     intellijPlatform {
-        providers.gradleProperty("localIdePath").orNull?.let { local(it) } ?: intellijIdea("2026.1.5")
+        val localPath = providers.gradleProperty("localIdePath").orNull
+        val targetVersion = providers.gradleProperty("targetIdeVersion").orElse("2026.1.5").get()
+        when {
+            localPath != null -> local(localPath)
+            targetVersion.startsWith("2024.") || targetVersion.startsWith("2025.1") || targetVersion.startsWith("2025.2") -> intellijIdeaCommunity(targetVersion)
+            else -> intellijIdea(targetVersion)
+        }
     }
 }
 

@@ -4,7 +4,7 @@
 
 ## 安装与本地测试
 
-Mac IDEA 2025.2 使用 `build/distributions/*-ic252.zip`；Windows IDEA 2026.1 使用 `build/distributions/*-ic261.zip`。在 IDEA **Settings → Plugins → Install Plugin from Disk** 安装并重启。插件运行时不需要 Node.js。
+IDEA 2024.2.1（build `242.21829.142`）使用 `build/distributions/*-ic242.zip`；Mac IDEA 2025.2 使用 `*-ic252.zip`；Windows IDEA 2026.1 使用 `*-ic261.zip`。在 IDEA **Settings → Plugins → Install Plugin from Disk** 安装并重启。插件运行时不需要 Node.js。2024.2 包已用同版本 Community SDK 编译并通过结构检查，仍需在目标 Windows 电脑上实机验证。
 
 1. Windows 版内置平台 API `http://10.154.76.195/api/v1` 和网页地址 `http://10.154.76.195`，没有设置入口，直接点击登录并完成浏览器设备码授权。Mac 本地测试版可点击右上角 ⚙，将 API 地址设为 `http://127.0.0.1:8090/api/v1`。
 2. 新建会话并发送一条消息，检查文字流、停止按钮、历史会话切换/删除和重新打开窗口后的恢复。

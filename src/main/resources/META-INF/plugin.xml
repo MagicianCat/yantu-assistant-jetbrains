@@ -1,8 +1,8 @@
 <idea-plugin>
     <id>com.taikang.yantu.assistant.jetbrains</id>
-    <name>研途助手（IDEA POC）</name>
+    <name>Yantu Assistant</name>
     <vendor>内部研发平台</vendor>
-    <description><![CDATA[研途助手 IDEA 插件 P0-C/D 遥测闭环验证版：JetBrains 本地采集、持久队列与平台上传。]]></description>
+    <description><![CDATA[Yantu Assistant connects the JetBrains IDE to the internal research platform for chat, Skill management, Wiki downloads, and local agent telemetry.]]></description>
     <depends>com.intellij.modules.platform</depends>
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="研途助手"
