@@ -7,7 +7,7 @@ import java.time.Duration
 
 object TelemetryRequestFactory {
     fun post(baseUrl: String, path: String, body: JsonObject, token: String, idempotencyKey: String?): HttpRequest {
-        require(path == "/telemetry/generations" || path == "/telemetry/skill-usage-events")
+        require(path in setOf("/telemetry/generations", "/telemetry/skill-usage-events", "/telemetry/command-usage-events"))
         val uri = URI.create(baseUrl.trimEnd('/') + path)
         require(uri.isAbsolute && uri.scheme in setOf("http", "https"))
         val builder = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(20))

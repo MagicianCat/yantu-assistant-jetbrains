@@ -26,8 +26,17 @@ object UploadWorkerFixture {
             check(worker.flushOnce(readyAt + 400_000).uploaded == 1)
             check(outbox.stats().first == 0)
             check(worker.flushOnce(readyAt + 800_000).uploaded == 0 && attempts == 2)
+            val command = JsonObject().apply { addProperty("eventId", "fixture-command") }
+            outbox.enqueueCommand("fixture-command", command)
+            val diagnostic = mutableListOf<String>()
+            val failed = UploadWorker(outbox, { true }, diagnostic::add) { _, _, _ ->
+                throw IllegalArgumentException("Bearer secret-do-not-log")
+            }.flushOnce()
+            check(failed.error?.contains("IllegalArgumentException at") == true)
+            check(diagnostic.single().contains("thrownAt=") && diagnostic.single().contains("pluginAt="))
+            check("secret-do-not-log" !in diagnostic.single() && "secret-do-not-log" !in failed.error.orEmpty())
             val recovered = DurableOutbox(root)
-            check(recovered.stats().first == 0)
+            check(recovered.stats().first == 1)
         } finally {
             Files.walk(root).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
         }

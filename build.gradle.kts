@@ -54,6 +54,12 @@ tasks.register<JavaExec>("verifyScannerFixture") {
     mainClass = "com.taikang.yantu.telemetry.StructuredScannerFixture"
 }
 
+tasks.register<JavaExec>("verifyCommandUsage") {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass = "com.taikang.yantu.telemetry.CommandUsageFixture"
+}
+
 tasks.register<JavaExec>("verifyLogFixture") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath

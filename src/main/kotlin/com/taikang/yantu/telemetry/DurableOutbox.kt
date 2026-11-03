@@ -67,10 +67,18 @@ class DurableOutbox(private val root: Path) {
         items[key] = item
         return item
     }
+    @Synchronized fun enqueueCommand(eventId: String, payload: JsonObject): Item? {
+        val key = "command:$eventId"
+        if (items.containsKey(key)) return null
+        val item = Item(key, "command", payload.deepCopy(), 1, 0, sha256(payload.toString()), System.currentTimeMillis())
+        write(item)
+        items[key] = item
+        return item
+    }
 
     @Synchronized fun pending(nowMs: Long = System.currentTimeMillis()): List<Item> = items.values
         .filter { it.uploadedRevision < it.revision && it.retryAtMs <= nowMs && nowMs - it.changedAtMs >= settleMs(it) }
-        .sortedWith(compareBy<Item> { if (it.kind == "skill") 0 else 1 }.thenBy { it.changedAtMs })
+        .sortedWith(compareBy<Item> { if (it.kind != "generation") 0 else 1 }.thenBy { it.changedAtMs })
         .take(100).map { it.copy(payload = it.payload.deepCopy()) }
 
     @Synchronized fun ack(id: String, revision: Int) {
@@ -99,7 +107,7 @@ class DurableOutbox(private val root: Path) {
     }
 
     private fun settleMs(item: Item): Long = when {
-        item.kind == "skill" -> 0
+        item.kind == "skill" || item.kind == "command" -> 0
         item.payload.get("captureQuality")?.asString == "STRUCTURED" -> 10_000
         else -> 30_000
     }
@@ -120,7 +128,7 @@ class DurableOutbox(private val root: Path) {
         val obj = JsonParser.parseString(Files.readString(path)).asJsonObject
         val id = obj.get("id")?.asString ?: return null
         val kind = obj.get("kind")?.asString ?: return null
-        if (kind !in setOf("generation", "skill") || path.fileName.toString() != sha256(id).take(40) + ".json") return null
+        if (kind !in setOf("generation", "skill", "command") || path.fileName.toString() != sha256(id).take(40) + ".json") return null
         return Item(id, kind, obj.getAsJsonObject("payload") ?: return null,
             obj.get("revision")?.asInt ?: return null, obj.get("uploadedRevision")?.asInt ?: 0,
             obj.get("fingerprint")?.asString ?: "", obj.get("changedAtMs")?.asLong ?: 0,

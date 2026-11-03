@@ -12,6 +12,9 @@ import java.util.concurrent.TimeUnit
 /** Read-only, bounded scan of TkCoding's JetBrains metadata. Message text is never retained. */
 class StructuredScanner(private val dataRoot: Path, private val now: () -> Instant = Instant::now) {
     data class SkillCall(val skillKey: String, val toolCallId: String, val invokedAt: String?)
+    data class CommandCall(val commandName: String, val promptPath: String?, val triggerType: String,
+                           val evidenceType: String, val invokedAt: String?, val verified: Boolean,
+                           val reqArgument: String?)
     data class FileTypeMetric(val type: String, val extension: String, val linesAdded: Long,
                               val linesDeleted: Long, val filesCreated: Int, val filesModified: Int)
     data class Turn(
@@ -27,6 +30,7 @@ class StructuredScanner(private val dataRoot: Path, private val now: () -> Insta
         val cacheMissTokens: Long? = null, val thinkingTokens: Long? = null,
         val lastTokens: Long? = null, val modelCallCount: Long? = null,
         val endedAt: String? = null,
+        val commandCalls: List<CommandCall> = emptyList(), val reqIdsFromFiles: List<String> = emptyList(),
     )
     data class Result(val partitions: Int, val sessions: Int, val requests: Int, val incomplete: Int,
                       val latest: Turn?, val turns: List<Turn> = emptyList())
@@ -72,6 +76,8 @@ class StructuredScanner(private val dataRoot: Path, private val now: () -> Insta
                             val toolIds = mutableSetOf<String>()
                             val skillIds = mutableSetOf<String>()
                             val callDetails = linkedMapOf<String, SkillCall>()
+                            val commandCandidates = mutableListOf<CommandCall>()
+                            val readPaths = mutableSetOf<String>()
                             var model: String? = null
                             var lastMessageAt: String? = null
                             var complete = true
@@ -89,10 +95,22 @@ class StructuredScanner(private val dataRoot: Path, private val now: () -> Insta
                                     (parseInstant(createdAt)?.isAfter(parseInstant(lastMessageAt)) == true))) lastMessageAt = createdAt
                                 collectTools(message.get("message") ?: message, toolIds, skillIds, callDetails,
                                     message.string("createdAt") ?: started, 0)
+                                if (message.string("role")?.equals("user", true) == true)
+                                    commandCandidate(extra, message.string("createdAt") ?: started)?.let(commandCandidates::add)
+                                collectReadPaths(message.get("message") ?: message, readPaths, 0)
                             }
                             if (!complete) { incomplete++; continue }
                             val usage = if (state.equals("complete", true) || state.equals("completed", true)) request.get("usage").obj() else null
                             val diffs = if (tree != null) fileMetrics(tree, id, session.fileName.toString()) else Diff(0, 0, 0)
+                            val commandCalls = commandCandidates.map { candidate ->
+                                if (candidate.triggerType == "MENU") candidate else {
+                                    val path = readPaths.firstOrNull { (it.contains("/.asdm/toolsets/") || it.startsWith(".asdm/toolsets/")) &&
+                                        it.endsWith("/actions/${candidate.commandName.lowercase()}.md") }
+                                    candidate.copy(promptPath = path?.substringAfter(".asdm/toolsets/")?.let { ".asdm/toolsets/$it" },
+                                        verified = path != null)
+                                }
+                            }
+                            val reqIds = if (tree != null) requirementIdsFromFiles(tree, id) else emptyList()
                             val turn = Turn(id, session.fileName.toString(), state, usage?.number("inputTokens"), usage?.number("outputTokens"),
                                 usage?.number("totalTokens"), toolIds.size, skillIds.size, diffs.added, diffs.removed, diffs.files, model, started,
                                 native.fileName.toString(), workspace.fileName.toString(),
@@ -102,7 +120,8 @@ class StructuredScanner(private val dataRoot: Path, private val now: () -> Insta
                                 usage?.number("cachedWriteTokens") ?: usage?.number("cacheWriteTokens"),
                                 usage?.number("cachedMissTokens") ?: usage?.number("cacheMissTokens"),
                                 usage?.number("thinkingTokens"), usage?.number("lastTokens"), usage?.number("modelCallCount"),
-                                if (state.equals("complete", true) || state.equals("completed", true)) lastMessageAt else null)
+                                if (state.equals("complete", true) || state.equals("completed", true)) lastMessageAt else null,
+                                commandCalls, reqIds)
                             requests++
                             allTurns.add(turn)
                             if (started.orEmpty() >= latestTime) { latestTime = started.orEmpty(); latest = turn }
@@ -118,6 +137,57 @@ class StructuredScanner(private val dataRoot: Path, private val now: () -> Insta
                             val created: Int = 0, val modified: Int = 0,
                             val fileTypes: List<FileTypeMetric> = emptyList())
     private data class FileAccumulator(var added: Long = 0, var removed: Long = 0, var created: Boolean = false)
+    private val commandName = Regex("[A-Za-z][A-Za-z0-9_-]{0,127}")
+    private val reqName = Regex("REQ-[\\p{L}\\p{N}_-]{1,251}")
+    private fun commandCandidate(extra: JsonObject?, at: String?): CommandCall? {
+        if (extra == null) return null
+        val blocks = extra.get("sourceContentBlocks")?.array()?.mapNotNull { it.obj() } ?: emptyList()
+        val resource = blocks.firstOrNull { it.get("_meta").obj()?.string("mentionType") == "command" }
+        val meta = resource?.get("_meta").obj()
+        val phrases = extra.get("inputPhrase")?.array()?.mapNotNull { it.obj() } ?: emptyList()
+        val commandIndex = phrases.indexOfFirst { it.string("type") == "command" }
+        val menu = meta?.string("commandName") ?: extra.string("command") ?: phrases.getOrNull(commandIndex)?.string("content")
+        if (menu != null && commandName.matches(menu)) {
+            val argument = if (commandIndex >= 0) phrases.drop(commandIndex + 1).filter { it.string("type") == "normal" }
+                .joinToString("") { it.string("content").orEmpty() } else ""
+            val afterResource = blocks.indexOf(resource)
+            val blockArgument = if (afterResource >= 0) blocks.drop(afterResource + 1).filter { it.string("type") == "text" }
+                .joinToString("") { it.string("text").orEmpty() } else ""
+            return CommandCall(menu, meta?.string("prompt")?.removePrefix("@"), "MENU", "STRUCTURED_COMMAND", at, true,
+                firstReqArgument(argument.ifBlank { blockArgument }))
+        }
+        val normal = phrases.firstOrNull { it.string("type") == "normal" }?.string("content") ?: return null
+        val match = Regex("^/([A-Za-z][A-Za-z0-9_-]{0,127})(?:\\s|$)").find(normal) ?: return null
+        return CommandCall(match.groupValues[1], null, "TYPED", "ACTION_FILE_READ", at, false,
+            firstReqArgument(normal.substring(match.value.length)))
+    }
+    private fun firstReqArgument(text: String): String? = text.trimStart().split(Regex("\\s+"), limit = 2)
+        .firstOrNull()?.takeIf { reqName.matches(it) }
+    private fun collectReadPaths(value: JsonElement?, paths: MutableSet<String>, depth: Int) {
+        if (value == null || depth > 4) return
+        val decoded = if (value.isJsonPrimitive && value.asJsonPrimitive.isString)
+            runCatching { JsonParser.parseString(value.asString) }.getOrNull() ?: return else value
+        if (decoded.isJsonArray) { decoded.asJsonArray.forEach { collectReadPaths(it, paths, depth + 1) }; return }
+        val obj = decoded.obj() ?: return
+        if ((obj.string("toolName") ?: obj.string("name")) == "read_file") {
+            val args = obj.get("args").obj() ?: obj.get("arguments").obj() ?: obj.get("parameters").obj() ?: obj.get("input").obj()
+            (args?.string("filePath") ?: args?.string("path"))?.replace('\\', '/')?.removePrefix("@")?.lowercase()?.let(paths::add)
+        }
+        for (key in listOf("toolCalls", "tools", "content", "parts", "message", "data"))
+            collectReadPaths(obj.get(key), paths, depth + 1)
+    }
+    private fun requirementIdsFromFiles(tree: JsonElement, requestId: String): List<String> {
+        val files = tree.array() ?: tree.obj()?.get("files")?.array() ?: return emptyList()
+        val ids = mutableSetOf<String>()
+        val pattern = Regex("\\.asdm/workspace/(?:requirements|features|prototypes)/(REQ-[^/]+)(?:/|$)", RegexOption.IGNORE_CASE)
+        for (entry in files) {
+            val file = entry.obj() ?: continue
+            val path = file.string("filePath")?.replace('\\', '/') ?: continue
+            if (file.get("versions")?.array()?.any { it.obj()?.get("metadata").obj()?.string("requestId") == requestId } != true) continue
+            pattern.find(path)?.groupValues?.get(1)?.takeIf { reqName.matches(it) }?.let(ids::add)
+        }
+        return ids.sorted()
+    }
     private val categories = mapOf("java" to "JAVA", "kt" to "KOTLIN", "kts" to "KOTLIN",
         "js" to "JAVASCRIPT", "jsx" to "JAVASCRIPT", "ts" to "TYPESCRIPT", "tsx" to "TYPESCRIPT",
         "vue" to "VUE", "html" to "HTML", "css" to "CSS", "sql" to "SQL", "xml" to "XML",

@@ -86,6 +86,7 @@ class TelemetryApplicationService : Disposable {
         val mapper = GenerationMapper(store.installationId, diagnostic = { detail ->
             if (diagnosticsSeen.add(detail)) LOG.info("telemetry resolution $detail")
         })
+        val commandMapper = CommandUsageMapper(store.installationId)
         val openWorkspaces = ProjectManager.getInstance().openProjects.mapNotNull { it.basePath }.distinct()
         val observed = mutableSetOf<String>()
         val structuredKeys = structured.turns.map { it.conversationId to it.requestId }.toSet()
@@ -99,11 +100,17 @@ class TelemetryApplicationService : Disposable {
             }
             val matchedWorkspace = if (turn.workspacePath.isNullOrBlank() && log?.workspacePath.isNullOrBlank())
                 openWorkspaces.singleOrNull { WorkspaceHash.matches(it, turn.workspaceHash) } else null
-            val mapped = mapper.structured(if (matchedWorkspace != null) turn.copy(workspacePath = matchedWorkspace) else turn, log) ?: continue
+            val resolvedTurn = if (matchedWorkspace != null) turn.copy(workspacePath = matchedWorkspace) else turn
+            val mapped = mapper.structured(resolvedTurn, log) ?: continue
             if (mapped.generationId in duplicateIds) continue
             observed.add(mapped.generationId)
             store.upsertGeneration(mapped.generationId, mapped.payload, mapped.quality)
             for (skill in mapped.skills) store.enqueueSkill(skill.get("eventId").asString, skill)
+            for (command in commandMapper.map(resolvedTurn, resolvedTurn.workspacePath ?: log?.workspacePath, mapped.generationId)) {
+                val eventId = command.get("eventId").asString
+                if (store.enqueueCommand(eventId, command) != null)
+                    LOG.info("telemetry ASDM command queued eventId=$eventId command=${command.get("commandName").asString} trigger=${command.get("triggerType").asString}")
+            }
         }
         for (turn in logs.turns.values) {
             if ((turn.conversationId to turn.requestId) in structuredKeys) continue

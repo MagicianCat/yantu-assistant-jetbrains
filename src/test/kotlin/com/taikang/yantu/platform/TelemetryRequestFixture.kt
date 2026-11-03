@@ -16,6 +16,12 @@ object TelemetryRequestFixture {
                 exchange.requestHeaders.getFirst("Idempotency-Key"), body))
             exchange.sendResponseHeaders(200, -1); exchange.close()
         }
+        server.createContext("/api/v1/telemetry/command-usage-events") { exchange ->
+            val body = exchange.requestBody.bufferedReader().readText()
+            observed.set(listOf(exchange.requestMethod, exchange.requestHeaders.getFirst("Authorization"),
+                exchange.requestHeaders.getFirst("Idempotency-Key"), body))
+            exchange.sendResponseHeaders(200, -1); exchange.close()
+        }
         server.start()
         try {
             val payload = JsonObject().apply { addProperty("eventId", "fixture-uuid") }
@@ -23,6 +29,10 @@ object TelemetryRequestFixture {
                 "/telemetry/skill-usage-events", payload, "fixture-access", "fixture-uuid")
             val response = PlatformHttpClient().send(request, HttpResponse.BodyHandlers.discarding())
             check(response.statusCode() == 200)
+            check(observed.get() == listOf("POST", "Bearer fixture-access", "fixture-uuid", payload.toString()))
+            val commandRequest = TelemetryRequestFactory.post("http://127.0.0.1:${server.address.port}/api/v1",
+                "/telemetry/command-usage-events", payload, "fixture-access", "fixture-uuid")
+            check(PlatformHttpClient().send(commandRequest, HttpResponse.BodyHandlers.discarding()).statusCode() == 200)
             check(observed.get() == listOf("POST", "Bearer fixture-access", "fixture-uuid", payload.toString()))
             check(runCatching { TelemetryRequestFactory.post("http://localhost/api/v1", "/other", payload, "x", null) }.isFailure)
         } finally { server.stop(0) }

@@ -1,6 +1,6 @@
-# 研途助手 IDEA 插件 · P1–P3 本地验证版
+# 研途助手 IDEA 插件 · ASDM 命令采集验证版
 
-当前版本 `0.5.6-p1p3-managed`。复用 TkCoding 的 SolidJS 聊天页面，在 IDEA 插件 JVM 内接入平台会话、SSE、Skill 推荐/安装/更新及 Wiki 下载。此前已通过 Windows 验证的遥测采集与上传仍独立后台运行。
+当前版本 `0.5.9-asdm-diagnostics`。复用 TkCoding 的 SolidJS 聊天页面，在 IDEA 插件 JVM 内接入平台会话、SSE、Skill 推荐/安装/更新及 Wiki 下载。遥测后台新增 ASDM 命令采集并上传到 `/telemetry/command-usage-events`；上传异常日志提供抛出位置，不记录令牌或请求正文。
 
 ## 安装与本地测试
 
@@ -22,5 +22,7 @@ IDEA 2024.2.1（build `242.21829.142`）使用 `build/distributions/*-ic242.zip`
 ## 验证边界
 
 已完成 Kotlin 编译、脱敏 Skill 安装与 ZIP 安全样本、既有遥测样本、前端 Chromium 渲染测试。本地后端 `127.0.0.1:8090` 可达；需要人工完成设备码授权，才能进行会话、Bundle 和 Wiki 的真实接口验收。Mac 与 Windows 的 UI/平台接口语义相同；项目路径和 TkCoding 数据源仍需 Windows 回归。
+
+ASDM 采集依据 JetBrains 结构化会话中的菜单命令，或手输命令后同一请求读取 `.asdm/toolsets/*/actions/<命令>.md` 的证据。插件还会核验项目 `.codebuddy/commands/<命令>.md` 的映射和 action 文件，避免将同名 Skill 当成命令。需求编号仅从命令首个参数或本轮 file-tree 提取；无法唯一确认时不填写。事件先写入本地 outbox，成功上传后确认，失败时重试。此版本已通过模拟会话和上传队列验证；真实 JetBrains 命令日志仍需 Windows 实机回归。
 
 若出现问题，在 IDEA **Help → Show Log** 中截取 `webview command failed`、`chat command failed` 或 `telemetry` 的相关行；不要发送访问令牌、原始对话或完整日志。

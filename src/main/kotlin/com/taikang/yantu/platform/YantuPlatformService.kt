@@ -174,7 +174,7 @@ class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Setti
 
     /** Used only by the telemetry worker. 2xx is the sole acknowledgement. */
     fun postTelemetry(path: String, body: JsonObject, idempotencyKey: String? = null): Int {
-        require(path == "/telemetry/generations" || path == "/telemetry/skill-usage-events")
+        require(path in setOf("/telemetry/generations", "/telemetry/skill-usage-events", "/telemetry/command-usage-events"))
         if (accessToken == null) restore()
         var token = accessToken ?: throw IllegalStateException("未登录，遥测保留在本地")
         var response = postWithToken(path, body, token, idempotencyKey)

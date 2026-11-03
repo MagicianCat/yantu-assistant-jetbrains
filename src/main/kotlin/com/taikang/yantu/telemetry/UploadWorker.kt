@@ -15,8 +15,12 @@ class UploadWorker(
         var uploaded = 0
         var lastError: String? = null
         for (item in outbox.pending(nowMs)) {
-            val path = if (item.kind == "skill") "/telemetry/skill-usage-events" else "/telemetry/generations"
-            val idempotencyKey = if (item.kind == "skill") item.id.removePrefix("skill:") else null
+            val path = when (item.kind) {
+                "skill" -> "/telemetry/skill-usage-events"
+                "command" -> "/telemetry/command-usage-events"
+                else -> "/telemetry/generations"
+            }
+            val idempotencyKey = if (item.kind == "skill" || item.kind == "command") item.id.substringAfter(':') else null
             try {
                 val status = send(path, item.payload, idempotencyKey)
                 if (status in 200..299) {
@@ -29,8 +33,11 @@ class UploadWorker(
                     if (status == 401 || status == 403) break
                 }
             } catch (error: Exception) {
-                lastError = "$path ${error.javaClass.simpleName}"
-                reportError("telemetry upload exception path=$path recordId=${item.id.take(64)} revision=${item.revision} type=${error.javaClass.simpleName} attempt=${item.attempts + 1}")
+                val thrownAt = error.stackTrace.firstOrNull()?.let { "${it.className.substringAfterLast('.')}:${it.lineNumber}" } ?: "unknown"
+                val pluginAt = error.stackTrace.firstOrNull { it.className.startsWith("com.taikang.yantu.") }
+                    ?.let { "${it.className.substringAfterLast('.')}:${it.lineNumber}" } ?: "unknown"
+                lastError = "$path ${error.javaClass.simpleName} at $pluginAt"
+                reportError("telemetry upload exception path=$path recordId=${item.id.take(64)} revision=${item.revision} type=${error.javaClass.simpleName} thrownAt=$thrownAt pluginAt=$pluginAt attempt=${item.attempts + 1}")
                 outbox.retry(item.id, lastError)
                 break
             }
