@@ -33,14 +33,14 @@ class YantuToolWindowFactory : ToolWindowFactory, DumbAware {
         if (runCatching { JBCefApp.isSupported() }.getOrDefault(false)) {
             val chat = runCatching { JcefChatView(project) }.getOrNull()
             if (chat != null) {
-                val content = ContentFactory.getInstance().createContent(chat.component, null, false)
+                val content = contentFactory().createContent(chat.component, null, false)
                 content.setDisposer(chat)
                 toolWindow.contentManager.addContent(content)
                 return
             }
         }
         val view = SwingStatusView()
-        val content = ContentFactory.getInstance().createContent(view.component, null, false)
+        val content = contentFactory().createContent(view.component, null, false)
         content.setDisposer(view)
         toolWindow.contentManager.addContent(content)
         view.refresh()
@@ -184,5 +184,14 @@ class YantuToolWindowFactory : ToolWindowFactory, DumbAware {
 
     companion object {
         private val LOG = Logger.getInstance(YantuToolWindowFactory::class.java)
+        private fun contentFactory(): ContentFactory {
+            // 2021–2022 exposed SERVICE; newer IDEs expose ContentFactory.getInstance().
+            return runCatching {
+                Class.forName("com.intellij.ui.content.ContentFactory\$SERVICE")
+                    .getMethod("getInstance").invoke(null) as ContentFactory
+            }.getOrElse {
+                ContentFactory::class.java.getMethod("getInstance").invoke(null) as ContentFactory
+            }
+        }
     }
 }

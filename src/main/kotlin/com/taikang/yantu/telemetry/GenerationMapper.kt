@@ -60,14 +60,14 @@ class GenerationMapper(private val installationId: String, private val markers: 
         val endedAt = logEndedAt ?: instant(turn.endedAt)
         val durationSource = if (logEndedAt != null) "LOG_END" else "STRUCTURED_MESSAGE_END"
         val workspaceCandidates = listOfNotNull(turn.workspacePath, log?.workspacePath).filter { it.isNotBlank() }.distinct()
-        val project = workspaceCandidates.firstNotNullOfOrNull(projects::resolve)
+        val project = workspaceCandidates.asSequence().mapNotNull(projects::resolve).firstOrNull()
         if (project == null) diagnostic("workspace unresolved generationId=$id structured=${turn.workspacePath?.isNotBlank() == true} log=${log?.workspacePath?.isNotBlank() == true}")
         data class ResolvedCall(val call: StructuredScanner.SkillCall, val marker: SkillMarkerResolver.Marker, val workspace: String?)
         val invocations = linkedMapOf<String, ResolvedCall>()
         for (call in (turn.skillCallDetails + (log?.skillCallDetails ?: emptyList())).distinctBy { it.toolCallId }) {
-            val matched = workspaceCandidates.firstNotNullOfOrNull { candidate ->
+            val matched = workspaceCandidates.asSequence().mapNotNull { candidate ->
                 markers.resolve(call.skillKey, candidate)?.let { it to candidate }
-            } ?: markers.resolve(call.skillKey, null)?.let { it to null }
+            }.firstOrNull() ?: markers.resolve(call.skillKey, null)?.let { it to null }
             if (matched == null) {
                 diagnostic("skill marker unresolved generationId=$id skillKey=${call.skillKey} workspaceStatus=${workspaceCandidates.map { markers.projectMarkerStatus(call.skillKey, it) }.distinct().joinToString(",").ifBlank { "workspace_missing" }}")
                 continue

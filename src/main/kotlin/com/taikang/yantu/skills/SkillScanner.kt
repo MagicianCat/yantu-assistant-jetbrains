@@ -23,9 +23,9 @@ class SkillScanner(private val home: Path = Path.of(System.getProperty("user.hom
                     val marker = readMarker(directory.resolve(".yantu-platform-skill.json"))
                     val validMarker = marker?.get("source")?.asString == "yantu-platform" && marker.get("skillKey")?.asString == key
                     val yaml = runCatching { Files.readString(directory.resolve("skill.yaml")).take(65_536) }.getOrNull()
-                    val version = yaml?.lineSequence()?.firstNotNullOfOrNull { line ->
+                    val version = yaml?.lineSequence()?.mapNotNull { line ->
                         Regex("^\\s*version\\s*:\\s*['\"]?([^\\n#'\"]+)").find(line)?.groupValues?.get(1)?.trim()
-                    } ?: marker?.get("version")?.let { runCatching { it.asString }.getOrNull() }
+                    }?.firstOrNull() ?: marker?.get("version")?.let { runCatching { it.asString }.getOrNull() }
                     found.add(LocalSkill(key, version, directory, scope, validMarker,
                         if (validMarker) marker?.get("skillVersionId")?.let { runCatching { it.asLong }.getOrNull() } else null))
                 }

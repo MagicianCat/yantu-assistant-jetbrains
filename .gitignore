@@ -7,3 +7,6 @@ build/
 webview/node_modules/
 webview/dist/
 webview/node_modules
+legacy/build/
+legacy/.gradle/
+legacy/.kotlin/

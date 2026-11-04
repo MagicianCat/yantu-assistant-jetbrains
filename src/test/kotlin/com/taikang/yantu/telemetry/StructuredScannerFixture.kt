@@ -28,8 +28,9 @@ object StructuredScannerFixture {
             repeat(2) {
                 val result = scanner.scan()
                 check(result.partitions == 1 && result.sessions == 1 && result.requests == 2 && result.incomplete == 0) { result }
-                check(result.latest?.requestId == "request-2" && result.latest.addedLines == 10L && result.latest.removedLines == 2L && result.latest.changedFiles == 2) { result }
-                check(result.latest.inputTokens == 20L && result.latest.toolCalls == 1) { result }
+                val latest = result.latest ?: error("missing latest turn")
+                check(latest.requestId == "request-2" && latest.addedLines == 10L && latest.removedLines == 2L && latest.changedFiles == 2) { result }
+                check(latest.inputTokens == 20L && latest.toolCalls == 1) { result }
                 val first = result.turns.single { it.requestId == "request-1" }
                 val second = result.turns.single { it.requestId == "request-2" }
                 check(first.addedLines == 0L && first.removedLines == 0L && first.skillCallDetails.size == 1) { first }
