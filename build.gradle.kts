@@ -30,7 +30,7 @@ dependencies {
     testRuntimeOnly("com.google.code.gson:gson:2.11.0")
     intellijPlatform {
         val localPath = providers.gradleProperty("localIdePath").orNull
-        val targetVersion = providers.gradleProperty("targetIdeVersion").orElse("2026.1.5").get()
+        val targetVersion = providers.gradleProperty("targetIdeVersion").orElse("2024.1").get()
         when {
             localPath != null -> local(localPath)
             targetVersion.startsWith("2024.") || targetVersion.startsWith("2025.1") || targetVersion.startsWith("2025.2") -> intellijIdeaCommunity(targetVersion)
@@ -42,8 +42,16 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = providers.gradleProperty("targetSinceBuild").orElse("261").get()
-            untilBuild = providers.gradleProperty("targetUntilBuild").orElse("261.*").get()
+            sinceBuild = providers.gradleProperty("targetSinceBuild").orElse("241").get()
+            untilBuild = providers.gradleProperty("targetUntilBuild").orElse("262.*").get()
+        }
+    }
+    pluginVerification {
+        providers.gradleProperty("pluginVerifierCliPath").orNull?.let { cliPath.set(file(it)) }
+        ides {
+            current()
+            providers.gradleProperty("verificationIdePaths").orNull?.split('|')?.filter { it.isNotBlank() }
+                ?.forEach { local(file(it)) }
         }
     }
 }
