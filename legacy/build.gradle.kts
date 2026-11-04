@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.taikang.yantu"
-version = "0.6.1-legacy-java11"
+version = "0.6.3-legacy-2021-2023"
 
 repositories { mavenCentral() }
 
@@ -17,7 +17,7 @@ intellij {
 
 tasks.patchPluginXml {
     sinceBuild.set("211")
-    untilBuild.set("222.*")
+    untilBuild.set("233.*")
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
