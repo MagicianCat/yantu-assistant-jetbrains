@@ -6,6 +6,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
+import com.intellij.ide.ui.LafManagerListener
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.util.Disposer
 import com.intellij.ui.jcef.JBCefBrowser
@@ -15,6 +16,11 @@ import com.taikang.yantu.platform.YantuPlatformService
 import com.taikang.yantu.platform.PlatformUrlResolver
 import com.taikang.yantu.platform.WindowsPlatformConfig
 import com.taikang.yantu.skills.SkillService
+import com.taikang.yantu.skills.AsdmInstaller
+import com.taikang.yantu.platform.PlatformApi
+import com.intellij.openapi.ui.Messages
+import java.nio.file.Files
+import java.nio.file.Path
 import com.taikang.yantu.wiki.WikiService
 import java.security.SecureRandom
 import java.util.Base64
@@ -24,6 +30,7 @@ import java.awt.event.HierarchyListener
 import javax.swing.JComponent
 import javax.swing.SwingUtilities
 import javax.swing.Timer
+import javax.swing.UIManager
 
 class JcefChatView(private val project: Project) : Disposable {
     private val browser = JBCefBrowser()
@@ -31,8 +38,10 @@ class JcefChatView(private val project: Project) : Disposable {
     private val closed = AtomicBoolean(false)
     private val chat = ChatService.get()
     private val skills = SkillService()
+    private val asdmInstaller = AsdmInstaller()
     private val wiki = WikiService()
     private val subscription: AutoCloseable
+    private val themeConnection = ApplicationManager.getApplication().messageBus.connect(this)
     private val visibilityListener = HierarchyListener { event ->
         if (event.changeFlags and HierarchyEvent.SHOWING_CHANGED.toLong() != 0L && browser.component.isShowing) scheduleRepaint()
     }
@@ -40,6 +49,7 @@ class JcefChatView(private val project: Project) : Disposable {
 
     init {
         chat.setProjectRoot(project.basePath)
+        themeConnection.subscribe(LafManagerListener.TOPIC, LafManagerListener { updateTheme() })
         browser.component.addHierarchyListener(visibilityListener)
         query.addHandler { raw ->
             if (raw.length <= 65_536) {
@@ -57,7 +67,8 @@ class JcefChatView(private val project: Project) : Disposable {
             val css = javaClass.getResourceAsStream("/webview/app.css")?.bufferedReader()?.use { it.readText() } ?: return@executeOnPooledThread
             val nonce = ByteArray(16).also(SecureRandom()::nextBytes).let { Base64.getEncoder().encodeToString(it) }
             val bridge = query.inject("JSON.stringify(message)")
-            val html = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-$nonce'; style-src 'nonce-$nonce'; connect-src 'none'; img-src data:;"><style nonce="$nonce">$css</style></head><body><div id="root"></div><script nonce="$nonce">window.yantuManagedWindows=${WindowsPlatformConfig.enabled()};window.yantuHost={postMessage:function(message){$bridge}};window.yantuHostEvent=function(data){window.dispatchEvent(new MessageEvent('message',{data:data}));};</script><script type="module" nonce="$nonce">$js</script></body></html>"""
+            val theme = currentTheme()
+            val html = """<!doctype html><html lang="zh-CN" data-yantu-theme="$theme"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-$nonce'; style-src 'nonce-$nonce'; connect-src 'none'; img-src data:;"><style nonce="$nonce">$css</style></head><body><div id="root"></div><script nonce="$nonce">window.yantuManagedWindows=${WindowsPlatformConfig.enabled()};window.yantuHost={postMessage:function(message){$bridge}};window.yantuHostEvent=function(data){window.dispatchEvent(new MessageEvent('message',{data:data}));};</script><script type="module" nonce="$nonce">$js</script></body></html>"""
             SwingUtilities.invokeLater {
                 if (!closed.get()) {
                     browser.loadHTML(html)
@@ -120,6 +131,22 @@ class JcefChatView(private val project: Project) : Disposable {
                     if (saved != null) chat.notice("info", "已保存 ${ids.distinct().size} 篇 Wiki 文档：$saved")
                 }
             }
+            "install-asdm-tool" -> {
+                val assetId = message.get("assetId")?.asLong?.takeIf { it > 0 } ?: throw IllegalArgumentException("工具包 ID 无效")
+                chat.execute {
+                    val root = project.basePath?.let(Path::of)?.takeIf { Files.isDirectory(it) }
+                        ?: throw IllegalStateException("请先打开项目，再安装 ASDM 工具包")
+                    if (Files.exists(root.resolve(".asdm"))) {
+                        val answer = java.util.concurrent.atomic.AtomicInteger(Messages.NO)
+                        SwingUtilities.invokeAndWait { answer.set(Messages.showYesNoDialog(project,
+                            "当前项目已有 .asdm 文件夹，安装将覆盖其中的现有内容。是否继续？", "确认覆盖", Messages.getWarningIcon())) }
+                        if (answer.get() != Messages.YES) return@execute
+                    }
+                    val count = asdmInstaller.install(PlatformApi().downloadAsdmTool(assetId), root, assetId)
+                    chat.refreshProjectStatus()
+                    chat.notice("info", "ASDM 工具包已安装，生成 $count 个 CodeBuddy Command")
+                }
+            }
             "retry-updates" -> chat.execute { chat.checkUpdates() }
             "dismiss-updates" -> chat.dismissUpdates()
             "install-updates" -> {
@@ -134,6 +161,17 @@ class JcefChatView(private val project: Project) : Disposable {
         SwingUtilities.invokeLater {
             if (!closed.get()) browser.cefBrowser.executeJavaScript("window.yantuHostEvent($payload);", "", 0)
         }
+    }
+    private fun updateTheme() {
+        SwingUtilities.invokeLater {
+            if (!closed.get()) browser.cefBrowser.executeJavaScript(
+                "document.documentElement.setAttribute('data-yantu-theme', '${currentTheme()}');", "", 0)
+        }
+    }
+    private fun currentTheme(): String {
+        val background = UIManager.getColor("Panel.background") ?: return "light"
+        val brightness = 0.2126 * background.red + 0.7152 * background.green + 0.0722 * background.blue
+        return if (brightness < 128) "dark" else "light"
     }
     private fun scheduleRepaint() {
         for (delay in intArrayOf(100, 500)) Timer(delay) {

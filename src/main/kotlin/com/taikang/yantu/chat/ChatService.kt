@@ -13,6 +13,7 @@ import com.taikang.yantu.platform.YantuPlatformService
 import com.taikang.yantu.skills.SkillScanner
 import com.taikang.yantu.skills.SkillUpdateService
 import java.nio.file.Path
+import java.nio.file.Files
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -58,6 +59,7 @@ class ChatService : Disposable {
         addProperty("loginPending", login.state == "等待浏览器授权" || login.state == "正在请求授权")
         login.userCode?.let { addProperty("userCode", it) }
         addProperty("osType", osType)
+        addProperty("asdmInstalled", projectRoot?.resolve(".asdm")?.let(Files::isDirectory) == true)
         add("sessions", sessions.deepCopy()); add("messages", messages.deepCopy()); add("recommendations", recommendations.deepCopy())
         add("skillUpdates", skillUpdates.deepCopy()); addProperty("updatesChecking", updatesChecking); addProperty("updatesInstalling", updatesInstalling)
         updateError?.let { addProperty("updateError", it) }
@@ -75,6 +77,7 @@ class ChatService : Disposable {
         return AutoCloseable { listeners.remove(listener) }
     }
     fun setProjectRoot(path: String?) { projectRoot = path?.let(Path::of) }
+    fun refreshProjectStatus() { publish() }
     @Synchronized fun currentOsType(): String = osType
     @Synchronized fun recommendedKeys(runKey: String): List<String> = recommendations.mapNotNull { item ->
         val row = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null

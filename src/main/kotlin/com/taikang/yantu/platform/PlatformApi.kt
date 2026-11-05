@@ -62,6 +62,10 @@ class PlatformApi(private val transport: YantuPlatformService = YantuPlatformSer
             add("rootVersionIds", JsonArray().also { a -> ids.forEach(a::add) })
         })?.obj() ?: error("Bundle 响应无效")
     fun downloadBundle(id: String): ByteArray = transport.authorizedBytes("GET", "/bundles/${segment(id)}/download")
+    fun downloadAsdmTool(assetId: Long): ByteArray {
+        require(assetId > 0) { "工具包 ID 无效" }
+        return transport.authorizedBytes("GET", "/asdm-tool-assets/$assetId/download")
+    }
     fun checkUpdates(osType: String, keys: List<String>): JsonArray {
         val value = transport.authorizedJson("POST", "/skill-updates:check", JsonObject().apply {
             addProperty("platform", "CODEBUDDY"); addProperty("osType", osType)

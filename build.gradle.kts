@@ -8,8 +8,8 @@ plugins {
 tasks.register("verifyWebviewAssets") {
     doLast {
         val expected = mapOf(
-            "app.js" to "37c346002ff0fc4b41153ef0db7c37616873eaca76c0dc3e6fb117ef5b6496ab",
-            "app.css" to "65da3266ee2c3fa10b1cf6da7e2ec3fdebb2db8a22269330f016f78aa06c6b15",
+            "app.js" to "510529e63f39b265aa8d6c5281dea5cd30884024343bc27f462f8021a30cc1e2",
+            "app.css" to "c264ff5785d777ecfa90debdfed178b15129eed86e2781cb1c62fbf7293bc52d",
         )
         for ((name, sha) in expected) {
             val file = layout.projectDirectory.file("src/main/resources/webview/$name").asFile
@@ -144,4 +144,10 @@ tasks.register<JavaExec>("verifyWindowsConfig") {
     dependsOn(tasks.testClasses)
     classpath = sourceSets.test.get().runtimeClasspath
     mainClass = "com.taikang.yantu.platform.WindowsConfigFixture"
+}
+
+tasks.register<JavaExec>("verifyAsdmInstaller") {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass = "com.taikang.yantu.skills.AsdmInstallerFixture"
 }

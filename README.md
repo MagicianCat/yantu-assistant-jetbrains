@@ -1,16 +1,19 @@
 # 研途助手 IDEA 插件 · 2024–2026 通用验证版
 
-当前版本 `0.6.2-universal`。复用 TkCoding 的 SolidJS 聊天页面，在 IDEA 插件 JVM 内接入平台会话、SSE、Skill 推荐/安装/更新及 Wiki 下载。遥测后台采集 ASDM 命令并上传到 `/telemetry/command-usage-events`；上传异常日志提供抛出位置，不记录令牌或请求正文。
+当前 Universal 版本 `0.6.5-universal`。复用 TkCoding 的 SolidJS 聊天页面，在 IDEA 插件 JVM 内接入平台会话、SSE、Skill 推荐/安装/更新、Wiki 下载及 ASDM 工具包一键安装。历史轮次的推荐与下载区默认收起，新发起轮次默认展开。JCEF 页面跟随 IDEA 的浅色或深色外观，切换主题时同步更新。遥测后台采集 ASDM 命令并上传到 `/telemetry/command-usage-events`；上传异常日志提供抛出位置，不记录令牌或请求正文。
 
 ## 安装与本地测试
 
-IDEA 2024.1 至 2026.2 使用 `build/distributions/yantu-assistant-jetbrains-0.6.2-universal.zip`；IDEA 2021.1 至 2023.3 使用 `build/distributions/yantu-assistant-jetbrains-legacy-0.6.3-legacy-2021-2023.zip`。在 IDEA **Settings → Plugins → Install Plugin from Disk** 安装并重启。插件运行时不需要 Node.js。新版包以 2024.1 Community SDK 和 JDK 17 编译，声明支持 build `241` 至 `262.*`；旧版包以 2021.1 Community SDK 编译为 Java 11 字节码，声明支持 build `211` 至 `233.*`。2022.3–2023.3 的运行时是 Java 17，可加载 Java 11 字节码。
+IDEA 2024.1 至 2026.2 使用 `build/distributions/yantu-assistant-jetbrains-0.6.5-universal.zip`；IDEA 2021.1 至 2023.3 使用 `build/distributions/yantu-assistant-jetbrains-legacy-0.6.5-legacy-2021-2023.zip`。在 IDEA **Settings → Plugins → Install Plugin from Disk** 安装并重启。插件运行时不需要 Node.js。新版包以 2024.1 Community SDK 和 JDK 17 编译，声明支持 build `241` 至 `262.*`；旧版包以 2021.1 Community SDK 编译为 Java 11 字节码，声明支持 build `211` 至 `233.*`。2022.3–2023.3 的运行时是 Java 17，可加载 Java 11 字节码。
 
 1. Windows 版内置平台 API `http://10.154.76.195/api/v1` 和网页地址 `http://10.154.76.195`，没有设置入口，直接点击登录并完成浏览器设备码授权。Mac 本地测试版可点击右上角 ⚙，将 API 地址设为 `http://127.0.0.1:8090/api/v1`。
 2. 新建会话并发送一条消息，检查文字流、停止按钮、历史会话切换/删除和重新打开窗口后的恢复。
 3. 对带 Skill 推荐的回答，检查项目/全局安装状态，选择安装范围并确认覆盖；核对 `.codebuddy/skills/<key>/SKILL.md`、`skill.yaml` 和 `.yantu-platform-skill.json`。安装时应连同依赖安装。
 4. 检查欢迎页 Skill 更新卡片，选择更新并核对项目与全局两个目录；手动在任一目录放置同名非平台 Skill 时应出现覆盖警告。
 5. 对带 `/wiki?documentId=<id>` 链接的回答，检查标题查询、单篇 Markdown 与多篇 ZIP 下载；取消保存对话框不应下载。
+6. 对带 `/asdm-tools/download/<id>` 链接的回答，点击一键安装；确认项目中生成 `.asdm/toolsets/...` 和 `.codebuddy/commands/*.md`，且 `.gitignore` 包含 `/.asdm/` 与 `/.codebuddy/`。已有 `.asdm` 时应先提示覆盖；已有不同内容的同名 Command 时应拒绝安装并保留原文件。
+7. 新问答中的推荐、Wiki 和 ASDM 区默认展开；历史轮次默认收起，可单独或批量展开。切换历史会话后应重新按历史状态显示。
+8. 将 IDEA 外观从浅色切换到深色再切回，检查插件背景、卡片、输入框和提示条是否立即跟随变化；也检查重新打开工具窗口后的初始颜色。
 
 ## 已实现的安全边界
 
@@ -21,9 +24,9 @@ IDEA 2024.1 至 2026.2 使用 `build/distributions/yantu-assistant-jetbrains-0.6
 
 ## 验证边界
 
-通用包已用 IntelliJ Plugin Verifier 1.410 检查 IC 2024.1、IC 2024.2.1、IC 2025.2.6.3、IU 2026.1.5 和 IU 2026.2.4，结果均为 `Compatible`。还通过 `verifyPluginStructure`、ASDM 采集、遥测请求和上传队列样本。Verifier 仍报告工具窗口接口及插件版本读取中的内部 API 使用，以及废弃/实验 API 使用；这些项目未被判为二进制不兼容。2024.3、2025.1 和 2025.3 尚未逐版运行 Verifier，实际安装与功能仍应在目标机器上回归。
+当前 `0.6.5-universal` 包通过 IC 2024.1 的 IntelliJ Plugin Verifier 1.410 检查，结果为 `Compatible`；还通过 `verifyPluginStructure` 和 ASDM 安装样本。`0.6.2-universal` 曾通过 IC 2024.1、IC 2024.2.1、IC 2025.2.6.3、IU 2026.1.5 和 IU 2026.2.4 检查。Verifier 仍报告工具窗口接口及插件版本读取中的内部 API 使用，以及废弃/实验 API 使用；这些项目未被判为二进制不兼容。新版包在其他 IDEA 版本上的实际安装与功能仍应在目标机器上回归。
 
-旧版包在 IC 2021.1、IC 2022.2、IC 2022.3、IC 2023.1、IC 2023.2 和 IC 2023.3 上的 Verifier 结果均为 `Compatible`，并通过 ASDM 命令、结构化扫描、上传队列与 HTTP 请求样本。2021.2、2021.3 和 2022.1 尚未逐版验证；JCEF、登录和 Windows 本地日志路径需要实机回归。旧版构建说明见 `legacy/README.md`。
+当前 `0.6.5-legacy-2021-2023` 包在 IC 2021.1、IC 2022.2、IC 2022.3、IC 2023.1、IC 2023.2 和 IC 2023.3 上的 Verifier 结果均为 `Compatible`，并通过 ASDM 安装、命令采集、结构化扫描、上传队列与 HTTP 请求样本。2021.2、2021.3 和 2022.1 尚未逐版验证；JCEF、登录和 Windows 本地日志路径仍需目标机器实机回归。旧版构建说明见 `legacy/README.md`。
 
 已完成 Kotlin 编译、脱敏 Skill 安装与 ZIP 安全样本、既有遥测样本、前端 Chromium 渲染测试。本地后端 `127.0.0.1:8090` 可达；需要人工完成设备码授权，才能进行会话、Bundle 和 Wiki 的真实接口验收。Mac 与 Windows 的 UI/平台接口语义相同；项目路径和 TkCoding 数据源仍需 Windows 回归。
 

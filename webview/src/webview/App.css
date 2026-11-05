@@ -1693,11 +1693,17 @@ button:hover { background: var(--button-secondary-hover-background); } button:di
 .wiki-downloads-head,.wiki-download-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .wiki-download-row label { display:flex; align-items:center; gap:6px; min-width:0; overflow-wrap:anywhere; }
 .wiki-download-row button,.wiki-downloads-head button { flex:none; }
-.settings-panel { padding: 12px 16px; border-bottom: 1px solid #dde2ec; display: flex; gap: 8px; align-items: end; }
-.settings-panel label { display: grid; gap: 5px; flex: 1; font-size: 12px; color: #596579; }
-.settings-panel input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #b8c4d5; border-radius: 6px; color: #1e293b; background: white; }
-.host-notice { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; font-size: 12px; color: #214a2e; background: #eaf7ee; }
-.host-notice.error { color: #8b1e1e; background: #fff0f0; }
+.resource-toolbar { position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; padding:6px 9px; border:1px solid var(--panel-border); border-radius:7px; background:var(--editor-background); color:var(--description-foreground); font-size:11px; }
+.resource-toolbar button { color:var(--text-link-foreground); background:transparent; }
+.resource-fold-toggle { display:inline-flex; align-items:center; gap:6px; min-width:0; padding:2px 0; color:var(--foreground); background:transparent; text-align:left; cursor:pointer; }
+.resource-fold-toggle span { flex:none; color:var(--description-foreground); }
+.resource-fold-toggle strong { overflow-wrap:anywhere; }
+.resource-group-toggle { width:100%; margin-top:18px; padding:7px 0; font-size:13px; }
+.settings-panel { padding: 12px 16px; border-bottom: 1px solid var(--panel-border); display: flex; gap: 8px; align-items: end; background: var(--sidebar-background); }
+.settings-panel label { display: grid; gap: 5px; flex: 1; font-size: 12px; color: var(--description-foreground); }
+.settings-panel input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--input-border); border-radius: 6px; color: var(--input-foreground); background: var(--input-background); }
+.host-notice { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; font-size: 12px; color: var(--foreground); background: var(--button-secondary-background); }
+.host-notice.error { color: var(--error-foreground); background: var(--editor-background); }
 .host-notice button { border: 0; background: transparent; color: inherit; cursor: pointer; }
 
 /* JetBrains JCEF does not provide VS Code theme variables. */
@@ -1718,8 +1724,7 @@ button:hover { background: var(--button-secondary-hover-background); } button:di
   --input-border: #aeb8c7;
   --error-foreground: #b42318;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
+:root[data-yantu-theme="dark"] {
     color-scheme: dark;
     --foreground: #e5e8ee;
     --description-foreground: #aeb7c5;
@@ -1735,7 +1740,6 @@ button:hover { background: var(--button-secondary-hover-background); } button:di
     --input-foreground: #e5e8ee;
     --input-border: #687284;
     --error-foreground: #ff8c82;
-  }
 }
 .shell { position: relative; min-width: 0; height: 100%; min-height: 0; overflow: hidden; }
 .shell .topbar, .shell .composer { flex: 0 0 auto; }
