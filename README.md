@@ -27,7 +27,7 @@ IDEA 2024.1 至 2026.2 使用 `build/distributions/yantu-assistant-jetbrains-0.6
 
 当前 `0.6.7-universal` 包通过 IC 2024.1 的 IntelliJ Plugin Verifier 1.410 检查，结果为 `Compatible`；还通过 `verifyPluginStructure` 和网页链接解析样本。`0.6.2-universal` 曾通过 IC 2024.1、IC 2024.2.1、IC 2025.2.6.3、IU 2026.1.5 和 IU 2026.2.4 检查。Verifier 仍报告工具窗口接口及插件版本读取中的内部 API 使用，以及废弃/实验 API 使用；这些项目未被判为二进制不兼容。新版包在其他 IDEA 版本上的实际安装与功能仍应在目标机器上回归。
 
-当前 `0.6.7-legacy-2021-2023` 包在 IC 2021.1、IC 2022.2、IC 2022.3、IC 2023.1、IC 2023.2 和 IC 2023.3 上的 Verifier 结果均为 `Compatible`，并通过网页链接解析、ASDM 安装、命令采集、结构化扫描、上传队列与 HTTP 请求样本。2021.2、2021.3 和 2022.1 尚未逐版验证；JCEF、登录和 Windows 本地日志路径仍需目标机器实机回归。旧版构建说明见 `legacy/README.md`。
+当前 `0.6.7-legacy-2021-2023` 包在 IC 2021.1、2021.2、2021.3、2022.1、2022.2、2022.3、2023.1、2023.2 和 2023.3 上的 Verifier 结果均为 `Compatible`，并通过网页链接解析、ASDM 安装、命令采集、结构化扫描、上传队列与 HTTP 请求样本。2021.2、2021.3 和 2022.1 报告两处 JCEF `JBCefJSQuery.create(JBCefBrowser)` 废弃 API 使用，未判为不兼容；JCEF、登录和 Windows 本地日志路径仍需目标机器实机回归。旧版构建说明见 `legacy/README.md`。
 
 已完成 Kotlin 编译、脱敏 Skill 安装与 ZIP 安全样本、既有遥测样本、前端 Chromium 渲染测试。本地后端 `127.0.0.1:8090` 可达；需要人工完成设备码授权，才能进行会话、Bundle 和 Wiki 的真实接口验收。Mac 与 Windows 的 UI/平台接口语义相同；项目路径和 TkCoding 数据源仍需 Windows 回归。
 
