@@ -8,7 +8,7 @@ plugins {
 tasks.register("verifyWebviewAssets") {
     doLast {
         val expected = mapOf(
-            "app.js" to "510529e63f39b265aa8d6c5281dea5cd30884024343bc27f462f8021a30cc1e2",
+            "app.js" to "070949a777259f72936d2a24af1825c30037b8e6ec9b29c975f0bc981105073e",
             "app.css" to "c264ff5785d777ecfa90debdfed178b15129eed86e2781cb1c62fbf7293bc52d",
         )
         for ((name, sha) in expected) {

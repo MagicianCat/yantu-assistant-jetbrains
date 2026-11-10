@@ -6,6 +6,20 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 object PlatformUrlResolver {
+    fun external(baseRaw: String, raw: String): URI {
+        require(raw.length in 1..2048 && !raw.any(Char::isISOControl)) { "网页链接无效" }
+        val link = URI.create(raw.trim())
+        require(link.toString().isNotBlank() && link.userInfo == null) { "网页链接无效" }
+        val target = if (link.isAbsolute) link else {
+            require(baseRaw.isNotBlank() && !raw.startsWith("#")) { "请先配置平台网页地址" }
+            URI.create(baseRaw.trimEnd('/') + "/").resolve(link)
+        }.normalize()
+        require(target.scheme?.lowercase() in setOf("http", "https") && target.host != null && target.userInfo == null) {
+            "只允许打开 HTTP(S) 网页链接"
+        }
+        return target
+    }
+
     fun detail(baseRaw: String, pathRaw: String): URI {
         require(baseRaw.isNotBlank()) { "请先配置平台网页地址" }
         require(pathRaw.length in 1..2048 && !pathRaw.startsWith("javascript:", true) && !pathRaw.startsWith("file:", true)) { "详情链接无效" }

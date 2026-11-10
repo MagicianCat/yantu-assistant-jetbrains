@@ -108,6 +108,11 @@ class JcefChatView(private val project: Project) : Disposable {
                 val detail = message.get("detailPath")?.asString ?: throw IllegalArgumentException("详情链接缺失")
                 chat.execute { BrowserUtil.browse(PlatformUrlResolver.checkedDetail(YantuPlatformService.get().snapshot().webBaseUrl, detail).toASCIIString()) }
             }
+            "open-external-url" -> {
+                val raw = message.get("url")?.asString ?: throw IllegalArgumentException("网页链接缺失")
+                val target = PlatformUrlResolver.external(YantuPlatformService.get().snapshot().webBaseUrl, raw)
+                chat.execute { BrowserUtil.browse(target.toASCIIString()) }
+            }
             "install-skill", "install-all" -> {
                 val runKey = id("runKey")
                 val keys = if (type == "install-all") chat.recommendedKeys(runKey) else listOf(id("skillKey"))
@@ -136,10 +141,10 @@ class JcefChatView(private val project: Project) : Disposable {
                 chat.execute {
                     val root = project.basePath?.let(Path::of)?.takeIf { Files.isDirectory(it) }
                         ?: throw IllegalStateException("请先打开项目，再安装 ASDM 工具包")
-                    if (Files.exists(root.resolve(".asdm"))) {
+                    if (Files.exists(root.resolve(".asdm")) || Files.exists(root.resolve(".codebuddy/commands"))) {
                         val answer = java.util.concurrent.atomic.AtomicInteger(Messages.NO)
                         SwingUtilities.invokeAndWait { answer.set(Messages.showYesNoDialog(project,
-                            "当前项目已有 .asdm 文件夹，安装将覆盖其中的现有内容。是否继续？", "确认覆盖", Messages.getWarningIcon())) }
+                            "安装将替换项目中的 .asdm，并清空重建 .codebuddy/commands。是否继续？", "确认覆盖", Messages.getWarningIcon())) }
                         if (answer.get() != Messages.YES) return@execute
                     }
                     val count = asdmInstaller.install(PlatformApi().downloadAsdmTool(assetId), root, assetId)

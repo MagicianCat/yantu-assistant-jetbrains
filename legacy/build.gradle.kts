@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.taikang.yantu"
-version = "0.6.5-legacy-2021-2023"
+version = "0.6.7-legacy-2021-2023"
 
 repositories { mavenCentral() }
 
@@ -46,6 +46,7 @@ mapOf(
     "verifyLegacyUpload" to "com.taikang.yantu.telemetry.UploadWorkerFixture",
     "verifyLegacyRequest" to "com.taikang.yantu.platform.TelemetryRequestFixture",
     "verifyLegacyAsdmInstaller" to "com.taikang.yantu.skills.AsdmInstallerFixture",
+    "verifyLegacyPlatformUrl" to "com.taikang.yantu.platform.PlatformUrlFixture",
 ).forEach { (taskName, fixture) ->
     tasks.register<JavaExec>(taskName) {
         dependsOn(tasks.testClasses)

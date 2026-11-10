@@ -42,20 +42,22 @@ class AsdmInstaller {
             commands[name] = "@.asdm/toolsets/$toolset/actions/$filename"
         }
         val target = projectRoot.resolve(".asdm")
-        val commandRoot = projectRoot.resolve(".codebuddy/commands")
-        require(!Files.isSymbolicLink(target) && !Files.isSymbolicLink(projectRoot.resolve(".codebuddy")) &&
+        val codebuddyRoot = projectRoot.resolve(".codebuddy")
+        val commandRoot = codebuddyRoot.resolve("commands")
+        require(!Files.isSymbolicLink(target) && !Files.isSymbolicLink(codebuddyRoot) &&
             !Files.isSymbolicLink(commandRoot)) { "安装目录不允许符号链接" }
-        for ((name, content) in commands) {
-            val path = commandRoot.resolve(name)
-            require(!Files.isSymbolicLink(path) && (!Files.exists(path) || Files.readString(path) == content)) {
-                "已有不同内容的 Command：$name"
-            }
+        require(!Files.exists(commandRoot, LinkOption.NOFOLLOW_LINKS) || Files.isDirectory(commandRoot)) {
+            "现有 commands 不是普通目录"
         }
+        require(!Files.isSymbolicLink(projectRoot.resolve(".gitignore"))) { ".gitignore 不允许符号链接" }
         val stage = projectRoot.resolve(".yantu-asdm-stage-${UUID.randomUUID()}")
         val backup = projectRoot.resolve(".yantu-asdm-backup-${UUID.randomUUID()}")
+        val commandStage = codebuddyRoot.resolve(".yantu-commands-stage-${UUID.randomUUID()}")
+        val commandBackup = codebuddyRoot.resolve(".yantu-commands-backup-${UUID.randomUUID()}")
         var backedUp = false
-        var installed = false
-        val createdCommands = mutableListOf<Path>()
+        var commandsBackedUp = false
+        var installedTarget = false
+        var installedCommands = false
         try {
             Files.createDirectory(stage)
             for (entry in files) {
@@ -68,29 +70,31 @@ class AsdmInstaller {
             Files.writeString(stage.resolve(".yantu-platform-asdm.json"), JsonObject().apply {
                 addProperty("assetId", assetId); addProperty("installedAt", Instant.now().toString())
             }.toString() + "\n", StandardOpenOption.CREATE_NEW)
+            Files.createDirectories(codebuddyRoot)
+            Files.createDirectory(commandStage)
+            for ((name, content) in commands) Files.writeString(commandStage.resolve(name), content, StandardOpenOption.CREATE_NEW)
             if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
                 require(Files.isDirectory(target) && !Files.isSymbolicLink(target)) { "现有 .asdm 不是普通目录" }
                 Files.move(target, backup); backedUp = true
             }
-            Files.move(stage, target); installed = true
-            if (commands.isNotEmpty()) Files.createDirectories(commandRoot)
-            for ((name, content) in commands) {
-                val path = commandRoot.resolve(name)
-                if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-                    Files.writeString(path, content, StandardOpenOption.CREATE_NEW)
-                    createdCommands.add(path)
-                } else require(!Files.isSymbolicLink(path) && Files.readString(path) == content) { "已有不同内容的 Command：$name" }
+            Files.move(stage, target); installedTarget = true
+            if (Files.exists(commandRoot, LinkOption.NOFOLLOW_LINKS)) {
+                Files.move(commandRoot, commandBackup); commandsBackedUp = true
             }
-            ensureIgnored(projectRoot, ".asdm")
-            ensureIgnored(projectRoot, ".codebuddy")
+            Files.move(commandStage, commandRoot); installedCommands = true
         } catch (failure: Exception) {
-            createdCommands.forEach(Files::deleteIfExists)
-            if (installed) deleteTree(target)
+            if (installedCommands) deleteTree(commandRoot)
+            if (commandsBackedUp) Files.move(commandBackup, commandRoot)
+            if (installedTarget) deleteTree(target)
             if (backedUp) Files.move(backup, target)
             deleteTree(stage)
+            deleteTree(commandStage)
             throw failure
         }
         if (backedUp) runCatching { deleteTree(backup) }
+        if (commandsBackedUp) runCatching { deleteTree(commandBackup) }
+        ensureIgnored(projectRoot, ".asdm")
+        ensureIgnored(projectRoot, ".codebuddy")
         return commands.size
     }
 

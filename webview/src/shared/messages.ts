@@ -29,6 +29,7 @@ export const WebviewMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("download-wiki"), documentIds: z.array(z.number().int().positive()).min(1).max(20) }),
   z.object({ type: z.literal("install-asdm-tool"), assetId: z.number().int().positive() }),
   z.object({ type: z.literal("wiki-metadata-request"), documentId: z.number().int().positive() }),
+  z.object({ type: z.literal("open-external-url"), url: z.string().min(1).max(2048) }),
   z.object({ type: z.literal("configure"), apiBaseUrl: z.string().url(), webBaseUrl: z.string().optional() }),
 ]);
 export type WebviewMessage = z.infer<typeof WebviewMessageSchema>;
