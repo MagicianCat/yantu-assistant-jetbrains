@@ -22,6 +22,19 @@ object AsdmInstallerFixture {
             check(Files.readString(project.resolve(".asdm/toolsets/code-dev/actions/prd-code.md")) == "first")
             check(Files.readString(project.resolve(".codebuddy/commands/prd-code.md")) ==
                 "@.asdm/toolsets/code-dev/actions/prd-code.md")
+            check(installer.install(zip(
+                "代码开发工具集/actions/code-review.md" to "代码开发",
+                "代码开发工具集/actions/generate-coding-extensions.md" to "扩展",
+                "代码开发工具集/rules/code-first-default-development-rules.mdc" to "规则",
+                "代码评审工具集/actions/code-review.md" to "代码评审",
+                "代码评审工具集/actions/set-review-standards.md" to "标准",
+                "代码评审工具集/spec/report-template.md" to "模板"
+            ), project, 44) == 4)
+            check(Files.readString(project.resolve(".codebuddy/commands/code-review.md")) ==
+                "@.asdm/toolsets/代码开发工具集/actions/code-review.md")
+            check(Files.readString(project.resolve(".codebuddy/commands/代码评审工具集-code-review.md")) ==
+                "@.asdm/toolsets/代码评审工具集/actions/code-review.md")
+            check(!Files.exists(project.resolve(".codebuddy/commands/report-template.md")))
             check(Files.readString(project.resolve(".gitignore")).contains("/.asdm/"))
             check(Files.readString(project.resolve(".gitignore")).contains("/.codebuddy/"))
             Files.writeString(project.resolve(".codebuddy/commands/custom.md"), "custom")

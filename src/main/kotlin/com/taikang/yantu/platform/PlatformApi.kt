@@ -62,6 +62,12 @@ class PlatformApi(private val transport: YantuPlatformService = YantuPlatformSer
             add("rootVersionIds", JsonArray().also { a -> ids.forEach(a::add) })
         })?.obj() ?: error("Bundle 响应无效")
     fun downloadBundle(id: String): ByteArray = transport.authorizedBytes("GET", "/bundles/${segment(id)}/download")
+    fun asdmToolTitle(assetId: Long): String {
+        require(assetId > 0) { "工具包 ID 无效" }
+        val info = transport.authorizedJson("GET", "/asdm-tool-assets/$assetId")?.obj() ?: error("工具包信息无效")
+        return info.string("wikiTitle")?.takeIf { it.isNotBlank() }
+            ?: info.string("filename")?.takeIf { it.isNotBlank() } ?: error("工具包名称缺失")
+    }
     fun downloadAsdmTool(assetId: Long): ByteArray {
         require(assetId > 0) { "工具包 ID 无效" }
         return transport.authorizedBytes("GET", "/asdm-tool-assets/$assetId/download")

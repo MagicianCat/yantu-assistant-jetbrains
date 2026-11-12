@@ -84,6 +84,7 @@ class JcefChatView(private val project: Project) : Disposable {
             ?.takeIf { it.matches(Regex("[A-Za-z0-9._:-]{1,256}")) } ?: throw IllegalArgumentException("$key 格式无效")
         when (type) {
             "ready", "refresh" -> chat.execute { chat.bootstrap() }
+            "refresh-sessions" -> chat.execute { chat.refreshSessions() }
             "login" -> chat.login()
             "logout" -> chat.execute { chat.logout() }
             "new-session" -> chat.execute { chat.newSession() }
@@ -127,6 +128,13 @@ class JcefChatView(private val project: Project) : Disposable {
                 chat.execute {
                     val title = runCatching { wiki.title(documentId) }.getOrDefault("文档已不可访问")
                     deliver(JsonObject().apply { addProperty("type", "wiki-metadata"); addProperty("documentId", documentId); addProperty("title", title) })
+                }
+            }
+            "asdm-metadata-request" -> {
+                val assetId = message.get("assetId")?.asLong?.takeIf { it > 0 } ?: throw IllegalArgumentException("工具包 ID 无效")
+                chat.execute {
+                    val title = runCatching { PlatformApi().asdmToolTitle(assetId) }.getOrDefault("工具包已不可访问")
+                    deliver(JsonObject().apply { addProperty("type", "asdm-metadata"); addProperty("assetId", assetId); addProperty("title", title) })
                 }
             }
             "download-wiki" -> {

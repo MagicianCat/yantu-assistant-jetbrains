@@ -10,6 +10,7 @@ const managedWindows = window.yantuManagedWindows === true || navigator.userAgen
 const thinkingMessages = ["正在理解你的问题…", "正在分析相关上下文…", "正在检索相关信息…", "正在组织回答…"];
 export default function App() {
   const [state, setState] = createSignal(initial); const [input, setInput] = createSignal(""); const [notice, setNotice] = createSignal<{ level: "info" | "error"; message: string }>(); let pendingDraft = ""; const [settingsOpen, setSettingsOpen] = createSignal(false); const [apiUrl, setApiUrl] = createSignal(""); const [webUrl, setWebUrl] = createSignal(""); const [historyOpen, setHistoryOpen] = createSignal(false); const [locallySubmitted, setLocallySubmitted] = createSignal(false); const [thinkingIndex, setThinkingIndex] = createSignal(0); const [selectedUpdateKeys, setSelectedUpdateKeys] = createSignal<string[]>([]); let scroll!: HTMLDivElement; let activeTurnEnd: HTMLElement | undefined; let followOutput = true; let lastSessionKey: string | undefined;
+  const authenticated = createMemo(() => state().authenticated);
   const awaitingAssistantText = () => { const messages = state().messages; let lastUserIndex = -1; for (let index = messages.length - 1; index >= 0; index -= 1) { if (messages[index]?.role === "user") { lastUserIndex = index; break; } } return lastUserIndex >= 0 && !messages.slice(lastUserIndex + 1).some(message => message.role === "assistant" && message.content.trim().length > 0); };
   const showThinking = () => locallySubmitted() || (state().running && awaitingAssistantText());
   const recommendationGroups = createMemo(() => { const groups = new Map<string, typeof initial.recommendations>(); for (const item of state().recommendations) { const runKey = item.runKey ?? state().currentRunKey; if (!runKey) continue; groups.set(runKey, [...(groups.get(runKey) ?? []), item]); } return [...groups].map(([runKey, items]) => ({ runKey, items })); });
@@ -33,6 +34,13 @@ export default function App() {
   window.addEventListener("message", receive); onCleanup(() => { window.removeEventListener("message", receive); window.clearInterval(thinkingTimer); }); createEffect(() => { state().messages.length; state().messages.at(-1)?.content.length; const active = showThinking() || state().running; queueMicrotask(() => { if (!followOutput || !scroll) return; if (active && activeTurnEnd?.isConnected) { activeTurnEnd.scrollIntoView({ block: "end", behavior: "smooth" }); return; } scroll.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" }); }); });
   let updateSignature = "";
   createEffect(() => { const signature = state().skillUpdates.map(item => `${item.skillKey}:${item.localVersion}:${item.latestVersion}:${item.scopes.join(",")}`).join("|"); if (signature !== updateSignature) { updateSignature = signature; setSelectedUpdateKeys(state().skillUpdates.map(item => item.skillKey)); } });
+  createEffect(() => {
+    if (!historyOpen() || !authenticated()) return;
+    const refresh = () => vscode.postMessage({ type: "refresh-sessions" });
+    refresh();
+    const timer = window.setInterval(refresh, 10_000);
+    onCleanup(() => window.clearInterval(timer));
+  });
   vscode.postMessage({ type: "ready" });
   const submitMessage = (content: string) => { const value = content.trim(); if (!value || state().running || locallySubmitted()) return; followOutput = true; pendingDraft = value; setLocallySubmitted(true); setThinkingIndex(0); pendingFresh = true; previousRunKey = state().currentRunKey; vscode.postMessage({ type: "send-message", content: value }); setInput(""); };
   const send = () => submitMessage(input());

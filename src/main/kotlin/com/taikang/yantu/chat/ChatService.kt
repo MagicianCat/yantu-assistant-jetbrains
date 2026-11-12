@@ -78,6 +78,18 @@ class ChatService : Disposable {
     }
     fun setProjectRoot(path: String?) { projectRoot = path?.let(Path::of) }
     fun refreshProjectStatus() { publish() }
+    fun refreshSessions() {
+        if (platform.snapshot().state != "已登录") return
+        val refreshed = runCatching { api.sessions() }.getOrElse {
+            LOG.debug("session history refresh failed", it)
+            return
+        }
+        if (platform.snapshot().state != "已登录") return
+        val changed = synchronized(this) {
+            if (sessions == refreshed) false else { sessions = refreshed; true }
+        }
+        if (changed) publish()
+    }
     @Synchronized fun currentOsType(): String = osType
     @Synchronized fun recommendedKeys(runKey: String): List<String> = recommendations.mapNotNull { item ->
         val row = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
@@ -267,7 +279,12 @@ class ChatService : Disposable {
         if (terminal) {
             val sessionKey = synchronized(this) { currentSessionKey }
             if (sessionKey != null) commands.execute {
-                runCatching { if (synchronized(this) { currentRunKey == runKey }) selectSession(sessionKey) }
+                runCatching {
+                    if (synchronized(this) { currentRunKey == runKey }) {
+                        refreshSessions()
+                        selectSession(sessionKey)
+                    }
+                }
                     .onFailure { LOG.warn("run completion refresh failed", it) }
             }
         }

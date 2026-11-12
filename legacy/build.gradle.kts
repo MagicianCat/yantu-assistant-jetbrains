@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.taikang.yantu"
-version = "0.6.7-legacy-2021-2023"
+version = "0.6.8-legacy-2021-2023"
 
 repositories { mavenCentral() }
 

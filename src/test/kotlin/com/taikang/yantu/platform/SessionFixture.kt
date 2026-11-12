@@ -11,5 +11,8 @@ object SessionFixture {
         check(normalized[0].asJsonObject.get("title").asString == "新对话")
         check(!normalized[0].asJsonObject.has("createdAt"))
         check(runCatching { PlatformApi.normalizeSession(JsonObject()) }.isFailure)
+        check(AuthorizedPathPolicy.allows("/asdm-tool-assets/42"))
+        check(AuthorizedPathPolicy.allows("/asdm-tool-assets/42/download"))
+        check(!AuthorizedPathPolicy.allows("/asdm-tool-assets/42/delete"))
     }
 }

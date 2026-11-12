@@ -30,7 +30,7 @@ class AsdmInstaller {
         val actions = files.mapNotNull { entry ->
             val parts = entry.name.removePrefix(prefix).split('/')
             if (parts.size == 4 && parts[0] == "toolsets" && parts[2] == "actions" &&
-                parts[1].matches(Regex("[A-Za-z0-9_-]+")) && parts[3].matches(Regex("[A-Za-z0-9_-]+\\.md")))
+                parts[1].isNotBlank() && parts[3].endsWith(".md") && parts[3] != ".md")
                 parts[1] to parts[3] else null
         }.sortedWith(compareBy({ it.second }, { it.first }))
         val commands = linkedMapOf<String, String>()

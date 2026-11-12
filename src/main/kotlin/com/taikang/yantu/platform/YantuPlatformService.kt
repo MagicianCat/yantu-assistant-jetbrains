@@ -218,9 +218,7 @@ class YantuPlatformService : PersistentStateComponent<YantuPlatformService.Setti
 
     private fun <T> authorized(method: String, path: String, body: String?, handler: HttpResponse.BodyHandler<T>,
                                lastEventId: String? = null, streaming: Boolean = false): HttpResponse<T> {
-        require(path.startsWith("/agent/") || path.startsWith("/bundles/") || path == "/bundles" ||
-            path.startsWith("/wiki/") || path == "/wiki/documents:download" || path == "/skill-updates:check" ||
-            path.matches(Regex("/asdm-tool-assets/[1-9][0-9]*/download")))
+        require(AuthorizedPathPolicy.allows(path))
         if (accessToken == null) restore()
         fun send(token: String): HttpResponse<T> {
             val builder = HttpRequest.newBuilder(url(path)).header("Authorization", "Bearer $token")
