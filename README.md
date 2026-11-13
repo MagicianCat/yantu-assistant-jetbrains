@@ -4,7 +4,7 @@
 
 ## 安装与本地测试
 
-IDEA 2024.1 至 2026.2 使用 `build/distributions/yantu-assistant-jetbrains-0.6.11-universal.zip`；IDEA 2021.1 至 2023.3 使用 `legacy/build/distributions/yantu-assistant-jetbrains-legacy-0.6.8-legacy-2021-2023.zip`。在 IDEA **Settings → Plugins → Install Plugin from Disk** 安装并重启。插件运行时不需要 Node.js。新版包以 2024.1 Community SDK 和 JDK 17 编译，声明支持 build `241` 至 `262.*`；旧版包以 2021.1 Community SDK 编译为 Java 11 字节码，声明支持 build `211` 至 `233.*`。2022.3–2023.3 的运行时是 Java 17，可加载 Java 11 字节码。
+IDEA 2024.1 至 2026.2 使用 `build/distributions/yantu-assistant-jetbrains-0.6.11-universal.zip`；IDEA 2021.1 至 2023.3 使用 `legacy/build/distributions/yantu-assistant-jetbrains-legacy-0.6.11-legacy-2021-2023.zip`。在 IDEA **Settings → Plugins → Install Plugin from Disk** 安装并重启。插件运行时不需要 Node.js。新版包以 2024.1 Community SDK 和 JDK 17 编译，声明支持 build `241` 至 `262.*`；旧版包以 2021.1 Community SDK 编译为 Java 11 字节码，声明支持 build `211` 至 `233.*`。2022.3–2023.3 的运行时是 Java 17，可加载 Java 11 字节码。
 
 1. Windows 版内置平台 API `http://10.154.76.195/api/v1` 和网页地址 `http://10.154.76.195`，没有设置入口，直接点击登录并完成浏览器设备码授权。Mac 本地测试版可点击右上角 ⚙，将 API 地址设为 `http://127.0.0.1:8090/api/v1`。
 2. 新建会话并发送一条消息，检查文字流、停止按钮、历史会话切换/删除和重新打开窗口后的恢复。
