@@ -1,17 +1,19 @@
 package com.taikang.yantu.telemetry
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.LinkOption
 import java.time.Instant
 import java.util.UUID
 
 /** Emits only installed ASDM commands with structured invocation evidence. */
 class CommandUsageMapper(private val installationId: String) {
     private val projects = ProjectResolver(installationId)
-    private val name = Regex("[A-Za-z][A-Za-z0-9_-]{0,127}")
-    private val mapping = Regex("@?\\.asdm/toolsets/([A-Za-z0-9_-]+)/actions/([A-Za-z0-9_-]+\\.md)")
+    private val name = Regex("[\\p{L}\\p{N}][\\p{L}\\p{N}._-]{0,127}")
+    private val mapping = Regex("@?\\.asdm/toolsets/([^/]+)/actions/([^/]+\\.md)")
     private val reqName = Regex("REQ-[\\p{L}\\p{N}_-]{1,251}")
 
     fun map(turn: StructuredScanner.Turn, workspace: String?, generationId: String): List<JsonObject> {
@@ -21,14 +23,16 @@ class CommandUsageMapper(private val installationId: String) {
             if (!call.verified || !name.matches(call.commandName)) return@mapNotNull null
             val shortcut = root.resolve(".codebuddy/commands/${call.commandName}.md")
             val content = readSmallFile(shortcut) ?: return@mapNotNull null
-            val match = mapping.matchEntire(content.trim()) ?: return@mapNotNull null
+            val match = mapping.matchEntire(content.removeSuffix("\n").removeSuffix("\r")) ?: return@mapNotNull null
             val toolset = match.groupValues[1]
-            if (match.groupValues[2] != "${call.commandName}.md") return@mapNotNull null
-            val relative = ".asdm/toolsets/$toolset/actions/${call.commandName}.md"
+            val actionFile = match.groupValues[2]
+            if (!name.matches(toolset) || !name.matches(actionFile.removeSuffix(".md"))) return@mapNotNull null
+            val relative = ".asdm/toolsets/$toolset/actions/$actionFile"
             if (call.promptPath != null && call.promptPath.replace('\\', '/').removePrefix("@")
                     .equals(relative, true).not()) return@mapNotNull null
             val action = root.resolve(relative)
             if (!Files.isRegularFile(action) || Files.isSymbolicLink(action)) return@mapNotNull null
+            val assetId = readAssetId(root)
             val at = runCatching { Instant.parse(call.invokedAt ?: turn.startedAt) }.getOrNull() ?: return@mapNotNull null
             val req = resolveReq(root, toolset, call.commandName, call.reqArgument, turn.reqIdsFromFiles)
             val eventId = eventId(turn.nativeInstallationId, turn.conversationId, turn.requestId, call.commandName)
@@ -36,6 +40,7 @@ class CommandUsageMapper(private val installationId: String) {
                 addProperty("eventId", eventId)
                 addProperty("commandName", call.commandName)
                 addProperty("toolsetName", toolset)
+                assetId?.let { addProperty("asdmAssetId", it) }
                 addProperty("triggerType", call.triggerType)
                 addProperty("evidenceType", call.evidenceType)
                 addProperty("installationId", installationId)
@@ -50,9 +55,19 @@ class CommandUsageMapper(private val installationId: String) {
     }
 
     private fun readSmallFile(file: Path): String? = runCatching {
-        if (!Files.isRegularFile(file) || Files.isSymbolicLink(file) || Files.size(file) !in 1..1_000_000) null
+        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || Files.size(file) !in 1..4096) null
         else Files.readString(file)
     }.getOrNull()
+
+    private fun readAssetId(root: Path): Long? {
+        val marker = root.resolve(".asdm/.yantu-platform-asdm.json")
+        val content = readSmallFile(marker) ?: return null
+        return runCatching {
+            val value = JsonParser.parseString(content).asJsonObject.get("assetId")
+            if (value == null || !value.isJsonPrimitive || !value.asJsonPrimitive.isNumber) null
+            else value.asLong.takeIf { it > 0 && it <= 9007199254740991L }
+        }.getOrNull()
+    }
 
     private fun resolveReq(root: Path, toolset: String, command: String, argument: String?, files: List<String>): Pair<String, String>? {
         val scoped = toolset == "req-analyzer" || toolset == "system-design" && !command.startsWith("system-") ||

@@ -105,7 +105,7 @@ class StructuredScanner(private val dataRoot: Path, private val now: () -> Insta
                             val commandCalls = commandCandidates.map { candidate ->
                                 if (candidate.triggerType == "MENU") candidate else {
                                     val path = readPaths.firstOrNull { (it.contains("/.asdm/toolsets/") || it.startsWith(".asdm/toolsets/")) &&
-                                        it.endsWith("/actions/${candidate.commandName.lowercase()}.md") }
+                                        it.contains("/actions/") && it.endsWith(".md", true) }
                                     candidate.copy(promptPath = path?.substringAfter(".asdm/toolsets/")?.let { ".asdm/toolsets/$it" },
                                         verified = path != null)
                                 }

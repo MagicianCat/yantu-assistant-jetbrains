@@ -15,6 +15,7 @@ object CommandUsageFixture {
             Files.createDirectories(workspace.resolve(".asdm/workspace/requirements/REQ-123-example"))
             Files.writeString(shortcut, "@.asdm/toolsets/system-design/actions/database-design.md\n")
             Files.writeString(action, "action")
+            Files.writeString(workspace.resolve(".asdm/.yantu-platform-asdm.json"), """{"assetId":123}""")
             val native = root.resolve("data/install/JetBrains/native")
             val session = native.resolve("history/workspace/conversation")
             Files.createDirectories(session.resolve("messages"))
@@ -36,10 +37,20 @@ object CommandUsageFixture {
                 val events = mapper.map(turn, turn.workspacePath, "jb-$id")
                 check(events.size == 1 && events[0].get("reqId")?.asString == "REQ-123-example") { events }
                 check(events[0].get("triggerType").asString == id.uppercase())
+                check(events[0].get("asdmAssetId").asLong == 123L)
                 outbox.enqueueCommand(events[0].get("eventId").asString, events[0])
                 check(mapper.map(turn, turn.workspacePath, "jb-$id")[0].get("eventId") == events[0].get("eventId"))
             }
             check(mapper.map(turns.getValue("skill"), workspace.toString(), "jb-skill").isEmpty())
+            val alias = "代码开发工具集-review"
+            Files.writeString(workspace.resolve(".codebuddy/commands/$alias.md"),
+                "@.asdm/toolsets/system-design/actions/database-design.md\n")
+            val aliasCall = StructuredScanner.CommandCall(alias, ".asdm/toolsets/system-design/actions/database-design.md",
+                "MENU", "STRUCTURED_COMMAND", timestamp, true, null)
+            val aliasTurn = turns.getValue("menu").copy(commandCalls = listOf(aliasCall))
+            check(mapper.map(aliasTurn, workspace.toString(), "jb-alias").single().get("toolsetName").asString == "system-design")
+            Files.writeString(workspace.resolve(".asdm/.yantu-platform-asdm.json"), """{"assetId":"bad"}""")
+            check(!mapper.map(turns.getValue("menu"), workspace.toString(), "jb-menu").single().has("asdmAssetId"))
             val restored = DurableOutbox(root.resolve("state"))
             check(restored.pending().size == 2)
             val sent = mutableListOf<String>()
